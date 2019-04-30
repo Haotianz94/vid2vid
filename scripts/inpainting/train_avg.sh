@@ -1,4 +1,4 @@
-CUDA_VISIBLE_DEVICES=3 python3 train.py --name video_inpainting_g1 \
+CUDA_VISIBLE_DEVICES=3 python3 train.py --name video_inpainting_avg \
 --dataroot '/mnt/ssd/tmp/hazhang/Vid2Vid/train/AvgHole' \
 --input_nc 3 --loadSize 384 \
 --nThreads 0 \
