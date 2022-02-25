@@ -54,7 +54,9 @@ class PoseDataset(BaseDataset):
                 Ai = torch.cat([Di, Oi])
             Bi = self.get_image(img_path, size, params, input_type='img')
             
-            Ai, Bi = self.crop(Ai), self.crop(Bi) # only crop the central half region to save time
+            ### HACK to preserve the square input/output
+            # Ai, Bi = self.crop(Ai), self.crop(Bi) # only crop the central half region to save time
+            ###
             A = concat_frame(A, Ai, n_frames_total)
             B = concat_frame(B, Bi, n_frames_total)
         
