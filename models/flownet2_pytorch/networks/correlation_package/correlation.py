@@ -1,9 +1,8 @@
 import torch
 from torch.nn.modules.module import Module
-from torch.autograd import Function
 import correlation_cuda
 
-class CorrelationFunction(Function):
+class CorrelationFunction(Module):
 
     def __init__(self, pad_size=3, kernel_size=3, max_displacement=20, stride1=1, stride2=2, corr_multiply=1):
         super(CorrelationFunction, self).__init__()
@@ -53,10 +52,11 @@ class Correlation(Module):
         self.stride1 = stride1
         self.stride2 = stride2
         self.corr_multiply = corr_multiply
+        self.corr = CorrelationFunction(self.pad_size, self.kernel_size, self.max_displacement,self.stride1, self.stride2, self.corr_multiply)
 
     def forward(self, input1, input2):
 
-        result = CorrelationFunction(self.pad_size, self.kernel_size, self.max_displacement,self.stride1, self.stride2, self.corr_multiply)(input1, input2)
+        result = self.corr(input1, input2)
 
         return result
 

@@ -11,8 +11,6 @@ from models.models import create_model, create_optimizer, init_params, save_mode
 import util.util as util
 from util.visualizer import Visualizer
 
-import warnings
-warnings.filterwarnings("ignore")
 
 def train():
     opt = TrainOptions().parse()
