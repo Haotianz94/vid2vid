@@ -15,7 +15,9 @@ class CorrelationFunction(Module):
         # self.out_channel = ((max_displacement/stride2)*2 + 1) * ((max_displacement/stride2)*2 + 1)
 
     def forward(self, input1, input2):
-        self.save_for_backward(input1, input2)
+        # self.save_for_backward(input1, input2)
+        self.input1 = input1
+        self.input2 = input2
 
         with torch.cuda.device_of(input1):
             rbot1 = input1.new()
@@ -28,7 +30,7 @@ class CorrelationFunction(Module):
         return output
 
     def backward(self, grad_output):
-        input1, input2 = self.saved_tensors
+        input1, input2 = self.input1, self.input2
 
         with torch.cuda.device_of(input1):
             rbot1 = input1.new()
