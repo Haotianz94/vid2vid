@@ -16,13 +16,18 @@ class PoseDataset(BaseDataset):
         self.dir_dp = os.path.join(opt.dataroot, opt.phase + '_densepose')
         self.dir_op = os.path.join(opt.dataroot, opt.phase + '_openpose')
         self.dir_img = os.path.join(opt.dataroot, opt.phase + '_img')                
+        self.dir_stick = os.path.join(opt.dataroot, opt.phase + '_stick')                
         self.img_paths = sorted(make_grouped_dataset(self.dir_img))
-        if not opt.openpose_only:
-            self.dp_paths = sorted(make_grouped_dataset(self.dir_dp))
-            check_path_valid(self.dp_paths, self.img_paths)
-        if not opt.densepose_only:
-            self.op_paths = sorted(make_grouped_dataset(self.dir_op))                
-            check_path_valid(self.op_paths, self.img_paths)
+        if self.opt.pose_stick_input:
+            self.stick_paths = sorted(make_grouped_dataset(self.dir_stick))
+            check_path_valid(self.stick_paths, self.img_paths)
+        else:
+            if not opt.openpose_only:
+                self.dp_paths = sorted(make_grouped_dataset(self.dir_dp))
+                check_path_valid(self.dp_paths, self.img_paths)
+            if not opt.densepose_only:
+                self.op_paths = sorted(make_grouped_dataset(self.dir_op))                
+                check_path_valid(self.op_paths, self.img_paths)
 
         self.init_frame_idx(self.img_paths)
 
@@ -37,26 +42,30 @@ class PoseDataset(BaseDataset):
 
         frame_range = list(range(n_frames_total)) if (self.opt.isTrain or self.A is None) else [self.opt.n_frames_G-1]
         for i in frame_range:
-            img_path = img_paths[start_idx + i * t_step]
-            if not self.opt.openpose_only:
-                dp_path = self.dp_paths[seq_idx][start_idx + i * t_step]
-                Di = self.get_image(dp_path, size, params, input_type='densepose')
-                Di[2,:,:] = ((Di[2,:,:] * 0.5 + 0.5) * 255 / 24 - 0.5) / 0.5
-            if not self.opt.densepose_only:
-                op_path = self.op_paths[seq_idx][start_idx + i * t_step]
-                Oi = self.get_image(op_path, size, params, input_type='openpose')
-
-            if self.opt.openpose_only:
-                Ai = Oi
-            elif self.opt.densepose_only:
-                Ai = Di
+            if self.opt.pose_stick_input:
+                stick_path = self.stick_paths[seq_idx][start_idx + i * t_step]
+                Ai = self.get_image(stick_path, size, params, input_type='img')
             else:
-                Ai = torch.cat([Di, Oi])
+                if not self.opt.openpose_only:
+                    dp_path = self.dp_paths[seq_idx][start_idx + i * t_step]
+                    Di = self.get_image(dp_path, size, params, input_type='densepose')
+                    Di[2,:,:] = ((Di[2,:,:] * 0.5 + 0.5) * 255 / 24 - 0.5) / 0.5
+                if not self.opt.densepose_only:
+                    op_path = self.op_paths[seq_idx][start_idx + i * t_step]
+                    Oi = self.get_image(op_path, size, params, input_type='openpose')
+
+                if self.opt.openpose_only:
+                    Ai = Oi
+                elif self.opt.densepose_only:
+                    Ai = Di
+                else:
+                    Ai = torch.cat([Di, Oi])
+
+            img_path = img_paths[start_idx + i * t_step]
             Bi = self.get_image(img_path, size, params, input_type='img')
             
-            ### HACK to preserve the square input/output
             # Ai, Bi = self.crop(Ai), self.crop(Bi) # only crop the central half region to save time
-            ###
+
             A = concat_frame(A, Ai, n_frames_total)
             B = concat_frame(B, Bi, n_frames_total)
         
