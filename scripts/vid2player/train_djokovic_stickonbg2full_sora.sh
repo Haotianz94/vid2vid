@@ -1,5 +1,5 @@
 python3 train.py --name djokovic_fg_stickonbg2full_sora \
---dataroot '/home/haotian/Projects/vid2player/data/train_input/vid2vid/djokovic_fg_stickonbg2full' \
+--dataroot '/home/haotian/Projects/vid2player/data/train_input/vid2vid/djokovic_fg_stick2full' \
 --dataset_mode pose \
 --pose_input_format 'stick_with_bg' \
 --input_nc 6 --num_D 1 \

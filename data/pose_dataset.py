@@ -22,7 +22,7 @@ class PoseDataset(BaseDataset):
             self.stick_paths = sorted(make_grouped_dataset(self.dir_stick))
             check_path_valid(self.stick_paths, self.img_paths)
         elif self.opt.pose_input_format == 'stick_with_bg':
-            self.dir_stick = os.path.join(opt.dataroot, opt.phase + '_stickonbg')                
+            self.dir_stick = os.path.join(opt.dataroot, opt.phase + '_stickonblack')                
             self.stick_paths = sorted(make_grouped_dataset(self.dir_stick))
             check_path_valid(self.stick_paths, self.img_paths)
             self.dir_bg = os.path.join(opt.dataroot, opt.phase + '_bg')                
