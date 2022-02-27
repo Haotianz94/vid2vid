@@ -15,12 +15,19 @@ class PoseDataset(BaseDataset):
 
         self.dir_dp = os.path.join(opt.dataroot, opt.phase + '_densepose')
         self.dir_op = os.path.join(opt.dataroot, opt.phase + '_openpose')
-        self.dir_img = os.path.join(opt.dataroot, opt.phase + '_img')                
-        self.dir_stick = os.path.join(opt.dataroot, opt.phase + '_stick')                
+        self.dir_img = os.path.join(opt.dataroot, opt.phase + '_img')                        
         self.img_paths = sorted(make_grouped_dataset(self.dir_img))
-        if self.opt.pose_stick_input:
+        if self.opt.pose_input_format == 'stick_on_bg':
+            self.dir_stick = os.path.join(opt.dataroot, opt.phase + '_stickonbg')                
             self.stick_paths = sorted(make_grouped_dataset(self.dir_stick))
             check_path_valid(self.stick_paths, self.img_paths)
+        elif self.opt.pose_input_format == 'stick_with_bg':
+            self.dir_stick = os.path.join(opt.dataroot, opt.phase + '_stickonbg')                
+            self.stick_paths = sorted(make_grouped_dataset(self.dir_stick))
+            check_path_valid(self.stick_paths, self.img_paths)
+            self.dir_bg = os.path.join(opt.dataroot, opt.phase + '_bg')                
+            self.bg_paths = sorted(make_grouped_dataset(self.dir_bg))
+            check_path_valid(self.bg_paths, self.img_paths)
         else:
             if not opt.openpose_only:
                 self.dp_paths = sorted(make_grouped_dataset(self.dir_dp))
@@ -42,9 +49,15 @@ class PoseDataset(BaseDataset):
 
         frame_range = list(range(n_frames_total)) if (self.opt.isTrain or self.A is None) else [self.opt.n_frames_G-1]
         for i in frame_range:
-            if self.opt.pose_stick_input:
+            if self.opt.pose_input_format == 'stick_on_bg':
                 stick_path = self.stick_paths[seq_idx][start_idx + i * t_step]
                 Ai = self.get_image(stick_path, size, params, input_type='img')
+            elif self.opt.pose_input_format == 'stick_with_bg':
+                stick_path = self.stick_paths[seq_idx][start_idx + i * t_step]
+                Si = self.get_image(stick_path, size, params, input_type='img')
+                bg_path = self.bg_paths[seq_idx][start_idx + i * t_step]
+                Bi = self.get_image(bg_path, size, params, input_type='img')
+                Ai = torch.cat([Bi, Si])
             else:
                 if not self.opt.openpose_only:
                     dp_path = self.dp_paths[seq_idx][start_idx + i * t_step]

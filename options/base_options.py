@@ -69,7 +69,7 @@ class BaseOptions():
         self.parser.add_argument('--random_scale_points', action='store_true', help='randomly scale face keypoints a bit to create different results')
 
         # pose specific
-        self.parser.add_argument('--pose_stick_input', action='store_true', help='use pose stick figure as input')
+        self.parser.add_argument('--pose_input_format', type=str, default='', help='format of input pose')
         self.parser.add_argument('--densepose_only', action='store_true', help='use only densepose as input')
         self.parser.add_argument('--openpose_only', action='store_true', help='use only openpose as input') 
         self.parser.add_argument('--add_face_disc', action='store_true', help='add face discriminator') 

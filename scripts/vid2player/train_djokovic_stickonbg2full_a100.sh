@@ -1,7 +1,7 @@
 python train.py --name djokovic_fg_stickonbg2full \
---dataroot 'datasets/vid2player/djokovic_fg_stickonbg2full' \
+--dataroot 'datasets/vid2player/djokovic_fg_stick2full' \
 --dataset_mode pose \
---densepose_only \
+--pose_input_format 'stick_on_bg' \
 --input_nc 3 --num_D 2 \
 --resize_or_crop none \
 --gpu_ids 0 --batchSize 3 --max_frames_per_gpu 3 \
