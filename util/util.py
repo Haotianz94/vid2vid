@@ -16,8 +16,9 @@ def save_all_tensors(opt, real_A, fake_B, fake_B_first, fake_B_raw, real_B, flow
     elif opt.dataset_mode == 'pose':
         input_image = tensor2im(real_A)
         if real_A.size()[2] == 6:
-            input_image2 = tensor2im(real_A[0, -1, 3:])
-            input_image[input_image2 != 0] = input_image2[input_image2 != 0]
+            input_image = tensor2im(real_A[:, :, 3:])
+            # input_image2 = tensor2im(real_A[0, -1, 3:])
+            # input_image[input_image2 != 0] = input_image2[input_image2 != 0]
     else:
         c = 3 if opt.input_nc >= 3 else 1
         input_image = tensor2im(real_A[0, -1, :c], normalize=False)
