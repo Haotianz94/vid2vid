@@ -3,10 +3,13 @@ import torchvision.transforms as transforms
 import torch
 from PIL import Image
 import numpy as np
+import json
 
 from data.base_dataset import BaseDataset, get_img_params, get_transform, get_video_params, concat_frame
 from data.image_folder import make_grouped_dataset, check_path_valid
 from data.keypoint2img import read_keypoints
+from util.util import make_joint_heatmaps
+
 
 class PoseDataset(BaseDataset):
     def initialize(self, opt):
@@ -15,6 +18,8 @@ class PoseDataset(BaseDataset):
 
         self.dir_dp = os.path.join(opt.dataroot, opt.phase + '_densepose')
         self.dir_op = os.path.join(opt.dataroot, opt.phase + '_openpose')
+        self.dir_bg = os.path.join(opt.dataroot, opt.phase + '_bg')                
+        self.dir_kp = os.path.join(opt.dataroot, opt.phase + '_keypoints')                
         self.dir_img = os.path.join(opt.dataroot, opt.phase + '_img')                        
         self.img_paths = sorted(make_grouped_dataset(self.dir_img))
         if self.opt.pose_input_format == 'stick_on_bg':
@@ -25,7 +30,11 @@ class PoseDataset(BaseDataset):
             self.dir_stick = os.path.join(opt.dataroot, opt.phase + '_stickonblack')                
             self.stick_paths = sorted(make_grouped_dataset(self.dir_stick))
             check_path_valid(self.stick_paths, self.img_paths)
-            self.dir_bg = os.path.join(opt.dataroot, opt.phase + '_bg')                
+            self.bg_paths = sorted(make_grouped_dataset(self.dir_bg))
+            check_path_valid(self.bg_paths, self.img_paths)
+        elif self.opt.pose_input_format == 'heatmap_with_bg':
+            self.kp_paths = sorted(make_grouped_dataset(self.dir_kp))
+            check_path_valid(self.kp_paths, self.img_paths)
             self.bg_paths = sorted(make_grouped_dataset(self.dir_bg))
             check_path_valid(self.bg_paths, self.img_paths)
         else:
@@ -58,6 +67,12 @@ class PoseDataset(BaseDataset):
                 bg_path = self.bg_paths[seq_idx][start_idx + i * t_step]
                 Bi = self.get_image(bg_path, size, params, input_type='img')
                 Ai = torch.cat([Bi, Si])
+            elif self.opt.pose_input_format == 'heatmap_with_bg':
+                bg_path = self.bg_paths[seq_idx][start_idx + i * t_step]
+                Bi = self.get_image(bg_path, size, params, input_type='img')
+                kp_path = self.kp_paths[seq_idx][start_idx + i * t_step]
+                Hi = self.get_image(kp_path, size, params, input_type='heatmap')
+                Ai = torch.cat([Hi, Bi])
             else:
                 if not self.opt.openpose_only:
                     dp_path = self.dp_paths[seq_idx][start_idx + i * t_step]
@@ -91,11 +106,17 @@ class PoseDataset(BaseDataset):
         return return_list
 
     def get_image(self, A_path, size, params, input_type):
-        if input_type != 'openpose':
-            A_img = Image.open(A_path).convert('RGB')
-        else:            
+        if input_type == 'openpose':            
             random_drop_prob = self.opt.random_drop_prob if self.opt.isTrain else 0
-            A_img = Image.fromarray(read_keypoints(A_path, size, random_drop_prob, self.opt.remove_face_labels, self.opt.basic_point_only))            
+            A_img = Image.fromarray(read_keypoints(A_path, size, random_drop_prob, self.opt.remove_face_labels, self.opt.basic_point_only)) 
+        elif input_type == 'heatmap':
+            A_img = make_joint_heatmaps(size[0], size[1], np.array(json.load(open(A_path, 'r'))))
+            if 'crop' in self.opt.resize_or_crop:
+                A_img = A_img[params['crop_pos'][0] : params['crop_pos'][0] + params['crop_size'][0],
+                              params['crop_pos'][1] : params['crop_pos'][1] + params['crop_size'][1]]
+            return torch.from_numpy(A_img.transpose(2, 0, 1)).float()
+        else:
+            A_img = Image.open(A_path).convert('RGB')
 
         if input_type == 'densepose' and self.opt.isTrain:
             # randomly remove labels

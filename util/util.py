@@ -17,8 +17,8 @@ def save_all_tensors(opt, real_A, fake_B, fake_B_first, fake_B_raw, real_B, flow
         input_image = tensor2im(real_A)
         if real_A.size()[2] == 6:
             input_image = tensor2im(real_A[:, :, 3:])
-            # input_image2 = tensor2im(real_A[0, -1, 3:])
-            # input_image[input_image2 != 0] = input_image2[input_image2 != 0]
+        elif real_A.size()[2] == 17:
+            input_image = tensor2im(sum([real_A[:, :, i:i+1] for i in range(14)]), normalize=False)
     else:
         c = 3 if opt.input_nc >= 3 else 1
         input_image = tensor2im(real_A[0, -1, :c], normalize=False)
@@ -211,3 +211,25 @@ class Colorize(object):
             color_image[2][mask] = self.cmap[label][2]
 
         return color_image
+
+
+def make_joint_heatmaps(img_width, img_height, kps, sigma=7/4.0):
+
+    def make_gaussian_map(img_width, img_height, center, var_x, var_y, theta):
+        xv, yv = np.meshgrid(np.array(range(img_width)), np.array(range(img_height)),
+                             sparse=False, indexing='xy')
+
+        a = np.cos(theta) ** 2 / (2 * var_x) + np.sin(theta) ** 2 / (2 * var_y)
+        b = -np.sin(2 * theta) / (4 * var_x) + np.sin(2 * theta) / (4 * var_y)
+        c = np.sin(theta) ** 2 / (2 * var_x) + np.cos(theta) ** 2 / (2 * var_y)
+
+        return np.exp(-(a * (xv - center[0]) * (xv - center[0]) +
+                        2 * b * (xv - center[0]) * (yv - center[1]) +
+                        c * (yv - center[1]) * (yv - center[1])))
+
+    var = sigma ** 2
+    n_joints = kps.shape[1]
+    canvas = np.zeros((img_height, img_width, n_joints))
+    for i in range(n_joints):
+        canvas[:, :, i] = make_gaussian_map(img_width, img_height, kps[:2, i], var, var, 0)
+    return canvas
