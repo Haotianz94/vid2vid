@@ -19,7 +19,11 @@ class PoseDataset(BaseDataset):
         self.dir_dp = os.path.join(opt.dataroot, opt.phase + '_densepose')
         self.dir_op = os.path.join(opt.dataroot, opt.phase + '_openpose')
         self.dir_bg = os.path.join(opt.dataroot, opt.phase + '_bg')                
-        self.dir_kp = os.path.join(opt.dataroot, opt.phase + '_keypoints')                
+        self.dir_kp = os.path.join(opt.dataroot, opt.phase + '_keypoints')
+        if opt.use_relight:
+            self.dir_img = os.path.join(opt.dataroot, opt.phase + '_img_relight')
+        else:
+            self.dir_img = os.path.join(opt.dataroot, opt.phase + '_img_real')
         self.dir_img = os.path.join(opt.dataroot, opt.phase + '_img')                        
         self.img_paths = sorted(make_grouped_dataset(self.dir_img))
         if self.opt.pose_input_format == 'stick_on_bg':

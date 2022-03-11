@@ -10,4 +10,5 @@ setproctitle
 pytz
 dominate
 requests
-opencv-python 
+opencv-python
+tensorboard 

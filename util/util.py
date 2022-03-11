@@ -213,9 +213,9 @@ class Colorize(object):
         return color_image
 
 
-def make_joint_heatmaps(img_width, img_height, kps, sigma=7/4.0):
+def make_joint_heatmaps(img_width, img_height, kps, sigma=7/4.0, method='edt'):
 
-    def make_gaussian_map(img_width, img_height, center, var_x, var_y, theta):
+    def gaussian(img_width, img_height, center, var_x, var_y, theta):
         xv, yv = np.meshgrid(np.array(range(img_width)), np.array(range(img_height)),
                              sparse=False, indexing='xy')
 
@@ -227,9 +227,34 @@ def make_joint_heatmaps(img_width, img_height, kps, sigma=7/4.0):
                         2 * b * (xv - center[0]) * (yv - center[1]) +
                         c * (yv - center[1]) * (yv - center[1])))
 
+    def distance_transform(img_width, img_height, center, radius=10):
+        heatmap = np.zeros((img_height, img_width), dtype=np.float)
+        for i in range(-radius, radius+1, 1):
+            for j in range(-radius, radius+1, 1):
+                x = int(np.round(center[0])) + i
+                y = int(np.round(center[1])) + j
+                if x >= 0 and x < img_width and y >= 0 and y < img_height:
+                    d = np.sqrt(i*i + j*j)
+                    if i == 0 and j == 0:
+                        heatmap[y, x] = 1
+                    elif d > radius:
+                        heatmap[y, x] = 0
+                    else:
+                        heatmap[y, x] = np.sqrt(1. / d)
+        return heatmap
+
+    from schema.base import MaskRCNNPose, DCPose
+    if kp_format is 'maskrcnn_pose':
+        Pose = MaskRCNNPose
+    elif kp_format == 'dc_pose':
+        Pose = DCPose
+
     var = sigma ** 2
     n_joints = kps.shape[1]
     canvas = np.zeros((img_height, img_width, n_joints))
     for i in range(n_joints):
-        canvas[:, :, i] = make_gaussian_map(img_width, img_height, kps[:2, i], var, var, 0)
+        if method == 'gaussian':
+            canvas[:, :, i] = gaussian(img_width, img_height, kps[:2, i], var, var, 0)
+        elif method == 'edt':
+            canvas[:, :, i] = distance_transform(img_width, img_height, kps[:2, i])
     return canvas
