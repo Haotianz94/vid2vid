@@ -243,12 +243,6 @@ def make_joint_heatmaps(img_width, img_height, kps, sigma=7/4.0, method='edt'):
                         heatmap[y, x] = np.sqrt(1. / d)
         return heatmap
 
-    from schema.base import MaskRCNNPose, DCPose
-    if kp_format is 'maskrcnn_pose':
-        Pose = MaskRCNNPose
-    elif kp_format == 'dc_pose':
-        Pose = DCPose
-
     var = sigma ** 2
     n_joints = kps.shape[1]
     canvas = np.zeros((img_height, img_width, n_joints))

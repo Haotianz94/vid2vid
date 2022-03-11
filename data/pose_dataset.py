@@ -25,7 +25,6 @@ class PoseDataset(BaseDataset):
         else:
             self.dir_img = os.path.join(opt.dataroot, opt.phase + '_img_real')
         print('Using trainB images from', self.dir_img)
-        self.dir_img = os.path.join(opt.dataroot, opt.phase + '_img')                        
         self.img_paths = sorted(make_grouped_dataset(self.dir_img))
         if self.opt.pose_input_format == 'stick_on_bg':
             self.dir_stick = os.path.join(opt.dataroot, opt.phase + '_stickonbg')                
