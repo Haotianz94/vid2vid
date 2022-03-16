@@ -19,7 +19,7 @@ class PoseDataset(BaseDataset):
         self.dir_dp = os.path.join(opt.dataroot, opt.phase + '_densepose')
         self.dir_op = os.path.join(opt.dataroot, opt.phase + '_openpose')
         self.dir_bg = os.path.join(opt.dataroot, opt.phase + '_bg')                
-        self.dir_kp = os.path.join(opt.dataroot, opt.phase + '_keypoints')
+        self.dir_kp = os.path.join(opt.dataroot, opt.phase + '_keypoints_17')
         if opt.use_relight:
             self.dir_img = os.path.join(opt.dataroot, opt.phase + '_img_relight')
         else:
@@ -133,7 +133,8 @@ class PoseDataset(BaseDataset):
         elif input_type == 'stick':
             kps = np.array(json.load(open(A_path, 'r')))
             kps_noise = np.clip(np.random.normal(0, 5, kps.shape[0] * kps.shape[1]), -10, 10).reshape(kps.shape[0], -1)
-            A_img = make_stick_figures(size[0], size[1], kps + kps_noise)
+            A_img_np = make_stick_figures(size[0], size[1], kps + kps_noise)
+            A_img = Image.fromarray(A_img_np[:, :, ::-1])
         else:
             A_img = Image.open(A_path).convert('RGB')
 

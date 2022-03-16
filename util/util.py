@@ -277,10 +277,7 @@ def make_stick_figures(img_width, img_height, kps):
         LAnkle = 15
         RAnkle = 16
 
-        KP_THRESH = 0
-        KP_NUM = 17
-    
-    kp_thresh = -1e9
+
     shift = np.array([0, 0])
     line_thick = 4
     dot_radius = 4
@@ -313,31 +310,22 @@ def make_stick_figures(img_width, img_height, kps):
        [255, 0,   255],
        [0,   127, 255]]
       
-    # Perform the drawing on a copy of the image, to allow for blending.
     kp_mask = np.zeros((img_height, img_width, 3), dtype=np.uint8)
 
     # Draw mid shoulder / mid hip first for better visualization.
     mid_shoulder = (
         kps[:2, Pose.RShoulder] +
         kps[:2, Pose.LShoulder]) // 2 + shift
-    sc_mid_shoulder = np.minimum(
-        kps[2, Pose.RShoulder],
-        kps[2, Pose.LShoulder]) 
     mid_hip = (
         kps[:2, Pose.RHip] +
         kps[:2, Pose.LHip]) // 2 + shift
-    sc_mid_hip = np.minimum(
-        kps[2, Pose.RHip],
-        kps[2, Pose.LHip])
     nose_idx = Pose.Nose
-    if sc_mid_shoulder >= kp_thresh and kps[2, nose_idx] >= kp_thresh:
-        cv2.line(
-            kp_mask, tuple(mid_shoulder.astype(np.int)), tuple((kps[:2, nose_idx] + shift).astype(np.int)),
-            color=colors[len(kp_lines)], thickness=line_thick, lineType=cv2.LINE_AA)
-    if sc_mid_shoulder >= kp_thresh and sc_mid_hip >= kp_thresh:
-        cv2.line(
-            kp_mask, tuple(mid_shoulder.astype(np.int)), tuple(mid_hip.astype(np.int)),
-            color=colors[len(kp_lines) + 1], thickness=line_thick, lineType=cv2.LINE_AA)
+    cv2.line(
+        kp_mask, tuple(mid_shoulder.astype(np.int)), tuple((kps[:2, nose_idx] + shift).astype(np.int)),
+        color=colors[len(kp_lines)], thickness=line_thick, lineType=cv2.LINE_AA)
+    cv2.line(
+        kp_mask, tuple(mid_shoulder.astype(np.int)), tuple(mid_hip.astype(np.int)),
+        color=colors[len(kp_lines) + 1], thickness=line_thick, lineType=cv2.LINE_AA)
 
     # Draw the keypoints.
     for l in range(len(kp_lines)):
@@ -345,18 +333,14 @@ def make_stick_figures(img_width, img_height, kps):
         i2 = kp_lines[l][1]
         p1 = tuple((kps[:2, i1] + shift).astype(np.int))
         p2 = tuple((kps[:2, i2] + shift).astype(np.int))
-        if kps[2, i1] >= kp_thresh and kps[2, i2] >= kp_thresh:
-            cv2.line(
-                kp_mask, p1, p2,
-                color=colors[l], thickness=line_thick, lineType=cv2.LINE_AA)
-        if kps[2, i1] >= kp_thresh:
-            cv2.circle(
-                kp_mask, p1,
-                radius=dot_radius, color=colors[l], thickness=-1, lineType=cv2.LINE_AA)
-        if kps[2, i2] >= kp_thresh:
-            cv2.circle(
-                kp_mask, p2,
-                radius=dot_radius, color=colors[l], thickness=-1, lineType=cv2.LINE_AA)
+        cv2.line(
+            kp_mask, p1, p2,
+            color=colors[l], thickness=line_thick, lineType=cv2.LINE_AA)
+        cv2.circle(
+            kp_mask, p1,
+            radius=dot_radius, color=colors[l], thickness=-1, lineType=cv2.LINE_AA)
+        cv2.circle(
+            kp_mask, p2,
+            radius=dot_radius, color=colors[l], thickness=-1, lineType=cv2.LINE_AA)
 
-    # Blend the keypoints.
     return kp_mask
