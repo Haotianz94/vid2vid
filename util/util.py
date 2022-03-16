@@ -252,3 +252,111 @@ def make_joint_heatmaps(img_width, img_height, kps, sigma=7/4.0, method='edt'):
         elif method == 'edt':
             canvas[:, :, i] = distance_transform(img_width, img_height, kps[:2, i])
     return canvas
+
+
+def make_stick_figures(img_width, img_height, kps):
+    class Pose:
+        """
+        DCPose Body 17
+        """
+        Nose = 0
+        Neck = 1
+        Head = 2
+        LEar = 3
+        REar = 4
+        LShoulder = 5
+        RShoulder = 6
+        LElbow = 7
+        RElbow = 8
+        LWrist = 9
+        RWrist = 10
+        LHip = 11
+        RHip = 12
+        LKnee = 13
+        RKnee = 14
+        LAnkle = 15
+        RAnkle = 16
+
+        KP_THRESH = 0
+        KP_NUM = 17
+    
+    kp_thresh = -1e9
+    shift = np.array([0, 0])
+    line_thick = 4
+    dot_radius = 4
+
+    kp_lines = [
+        [Pose.RShoulder, Pose.RElbow],
+        [Pose.RElbow, Pose.RWrist],
+        [Pose.LShoulder, Pose.LElbow],
+        [Pose.LElbow, Pose.LWrist],
+        [Pose.RHip, Pose.RKnee],
+        [Pose.RKnee, Pose.RAnkle],
+        [Pose.LHip, Pose.LKnee],
+        [Pose.LKnee, Pose.LAnkle],
+        [Pose.RShoulder, Pose.LShoulder],
+        [Pose.RHip, Pose.LHip],
+    ]
+   
+    # Hand crafted colors that are different from court background
+    colors = [
+       [127, 0,   0],
+       [127, 127, 0],
+       [127, 0,   127],
+       [0,   127, 0],
+       [255, 255, 127],
+       [0,   255, 0],
+       [255, 127, 127],
+       [255, 0,   0],
+       [0,   0,   255],
+       [0,   0,   255],
+       [255, 0,   255],
+       [0,   127, 255]]
+      
+    # Perform the drawing on a copy of the image, to allow for blending.
+    kp_mask = np.zeros((img_height, img_width, 3), dtype=np.uint8)
+
+    # Draw mid shoulder / mid hip first for better visualization.
+    mid_shoulder = (
+        kps[:2, Pose.RShoulder] +
+        kps[:2, Pose.LShoulder]) // 2 + shift
+    sc_mid_shoulder = np.minimum(
+        kps[2, Pose.RShoulder],
+        kps[2, Pose.LShoulder]) 
+    mid_hip = (
+        kps[:2, Pose.RHip] +
+        kps[:2, Pose.LHip]) // 2 + shift
+    sc_mid_hip = np.minimum(
+        kps[2, Pose.RHip],
+        kps[2, Pose.LHip])
+    nose_idx = Pose.Nose
+    if sc_mid_shoulder >= kp_thresh and kps[2, nose_idx] >= kp_thresh:
+        cv2.line(
+            kp_mask, tuple(mid_shoulder.astype(np.int)), tuple((kps[:2, nose_idx] + shift).astype(np.int)),
+            color=colors[len(kp_lines)], thickness=line_thick, lineType=cv2.LINE_AA)
+    if sc_mid_shoulder >= kp_thresh and sc_mid_hip >= kp_thresh:
+        cv2.line(
+            kp_mask, tuple(mid_shoulder.astype(np.int)), tuple(mid_hip.astype(np.int)),
+            color=colors[len(kp_lines) + 1], thickness=line_thick, lineType=cv2.LINE_AA)
+
+    # Draw the keypoints.
+    for l in range(len(kp_lines)):
+        i1 = kp_lines[l][0]
+        i2 = kp_lines[l][1]
+        p1 = tuple((kps[:2, i1] + shift).astype(np.int))
+        p2 = tuple((kps[:2, i2] + shift).astype(np.int))
+        if kps[2, i1] >= kp_thresh and kps[2, i2] >= kp_thresh:
+            cv2.line(
+                kp_mask, p1, p2,
+                color=colors[l], thickness=line_thick, lineType=cv2.LINE_AA)
+        if kps[2, i1] >= kp_thresh:
+            cv2.circle(
+                kp_mask, p1,
+                radius=dot_radius, color=colors[l], thickness=-1, lineType=cv2.LINE_AA)
+        if kps[2, i2] >= kp_thresh:
+            cv2.circle(
+                kp_mask, p2,
+                radius=dot_radius, color=colors[l], thickness=-1, lineType=cv2.LINE_AA)
+
+    # Blend the keypoints.
+    return kp_mask

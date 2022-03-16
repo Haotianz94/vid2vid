@@ -8,7 +8,7 @@ import json
 from data.base_dataset import BaseDataset, get_img_params, get_transform, get_video_params, concat_frame
 from data.image_folder import make_grouped_dataset, check_path_valid
 from data.keypoint2img import read_keypoints
-from util.util import make_joint_heatmaps
+from util.util import make_joint_heatmaps, make_stick_figures
 
 
 class PoseDataset(BaseDataset):
@@ -34,6 +34,11 @@ class PoseDataset(BaseDataset):
             self.dir_stick = os.path.join(opt.dataroot, opt.phase + '_stickonblack')                
             self.stick_paths = sorted(make_grouped_dataset(self.dir_stick))
             check_path_valid(self.stick_paths, self.img_paths)
+            self.bg_paths = sorted(make_grouped_dataset(self.dir_bg))
+            check_path_valid(self.bg_paths, self.img_paths)
+        elif self.opt.pose_input_format == 'stick_noisy_with_bg':
+            self.kp_paths = sorted(make_grouped_dataset(self.dir_kp))
+            check_path_valid(self.kp_paths, self.img_paths)
             self.bg_paths = sorted(make_grouped_dataset(self.dir_bg))
             check_path_valid(self.bg_paths, self.img_paths)
         elif self.opt.pose_input_format == 'heatmap_with_bg':
@@ -68,6 +73,12 @@ class PoseDataset(BaseDataset):
             elif self.opt.pose_input_format == 'stick_with_bg':
                 stick_path = self.stick_paths[seq_idx][start_idx + i * t_step]
                 Si = self.get_image(stick_path, size, params, input_type='img')
+                bg_path = self.bg_paths[seq_idx][start_idx + i * t_step]
+                Bi = self.get_image(bg_path, size, params, input_type='img')
+                Ai = torch.cat([Bi, Si])
+            elif self.opt.pose_input_format == 'stick_noisy_with_bg':
+                kp_path = self.kp_paths[seq_idx][start_idx + i * t_step]
+                Si = self.get_image(kp_path, size, params, input_type='stick')
                 bg_path = self.bg_paths[seq_idx][start_idx + i * t_step]
                 Bi = self.get_image(bg_path, size, params, input_type='img')
                 Ai = torch.cat([Bi, Si])
@@ -119,6 +130,10 @@ class PoseDataset(BaseDataset):
                 A_img = A_img[params['crop_pos'][0] : params['crop_pos'][0] + params['crop_size'][0],
                               params['crop_pos'][1] : params['crop_pos'][1] + params['crop_size'][1]]
             return torch.from_numpy(A_img.transpose(2, 0, 1)).float()
+        elif input_type == 'stick':
+            kps = np.array(json.load(open(A_path, 'r')))
+            kps_noise = np.clip(np.random.normal(0, 5, kps.shape[0] * kps.shape[1]), -10, 10).reshape(kps.shape[0], -1)
+            A_img = make_stick_figures(size[0], size[1], kps + kps_noise)
         else:
             A_img = Image.open(A_path).convert('RGB')
 
