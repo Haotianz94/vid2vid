@@ -132,12 +132,14 @@ def init_params(opt, modelG, modelD, data_loader):
 
     return n_gpus, tG, tD, tDB, s_scales, t_scales, input_nc, output_nc, start_epoch, epoch_iter, print_freq, total_steps, iter_path
 
-def save_models(opt, epoch, epoch_iter, total_steps, visualizer, iter_path, modelG, modelD, end_of_epoch=False):
+def save_models(opt, epoch, epoch_iter, total_steps, visualizer, iter_path, modelG, modelD, scaler=None, end_of_epoch=False):
     if not end_of_epoch:
         if total_steps % opt.save_latest_freq == 0:
             visualizer.vis_print('saving the latest model (epoch %d, total_steps %d)' % (epoch, total_steps))
             modelG.module.save('latest')
             modelD.module.save('latest')
+            if scaler is not None:
+                torch.save(scaler.state_dict(), os.path.join(opt.checkpoints_dir, opt.name, 'latest_scaler.pth'))
             np.savetxt(iter_path, (epoch, epoch_iter), delimiter=',', fmt='%d')
     else:
         if epoch % opt.save_epoch_freq == 0:
@@ -146,6 +148,9 @@ def save_models(opt, epoch, epoch_iter, total_steps, visualizer, iter_path, mode
             modelD.module.save('latest')
             modelG.module.save(epoch)
             modelD.module.save(epoch)
+            if scaler is not None:
+                torch.save(scaler.state_dict(), os.path.join(opt.checkpoints_dir, opt.name, 'latest_scaler.pth'))
+                torch.save(scaler.state_dict(), os.path.join(opt.checkpoints_dir, opt.name, '{}_scaler.pth'.format(epoch)))
             np.savetxt(iter_path, (epoch+1, 0), delimiter=',', fmt='%d')
 
 def update_models(opt, epoch, modelG, modelD, data_loader):

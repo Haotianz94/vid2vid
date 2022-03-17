@@ -28,6 +28,10 @@ def train():
     ### initialize models
     models = create_model(opt)
     modelG, modelD, flowNet, optimizer_G, optimizer_D, optimizer_D_T = create_optimizer(opt, models)
+    if opt.use_amp:
+        scaler = torch.cuda.amp.GradScaler()
+    else:
+        scaler = None
 
     ### set parameters    
     n_gpus, tG, tD, tDB, s_scales, t_scales, input_nc, output_nc, \
@@ -52,17 +56,27 @@ def train():
                 input_A, input_B, inst_A = data_loader.dataset.prepare_data(data, i, input_nc, output_nc)
                 
                 ###################################### Forward Pass ##########################
-                ####### generator                  
-                fake_B, fake_B_raw, flow, weight, real_A, real_Bp, fake_B_last = modelG(input_A, input_B, inst_A, fake_B_prev_last)
+                ####### generator
+                if opt.use_amp:
+                    with torch.cuda.amp.autocast():                  
+                        fake_B, fake_B_raw, flow, weight, real_A, real_Bp, fake_B_last = modelG(input_A, input_B, inst_A, fake_B_prev_last)
+                else:
+                    fake_B, fake_B_raw, flow, weight, real_A, real_Bp, fake_B_last = modelG(input_A, input_B, inst_A, fake_B_prev_last)
 
                 ####### discriminator            
                 ### individual frame discriminator          
                 real_B_prev, real_B = real_Bp[:, :-1], real_Bp[:, 1:]   # the collection of previous and current real frames
-                flow_ref, conf_ref = flowNet(real_B, real_B_prev)       # reference flows and confidences                
+                
+                flow_ref, conf_ref = flowNet(real_B, real_B_prev)       # reference flows and confidences 
+                
                 fake_B_prev = modelG.module.compute_fake_B_prev(real_B_prev, fake_B_prev_last, fake_B)
                 fake_B_prev_last = fake_B_last
-               
-                losses = modelD(0, reshape([real_B, fake_B, fake_B_raw, real_A, real_B_prev, fake_B_prev, flow, weight, flow_ref, conf_ref]))
+                
+                if opt.use_amp:
+                    with torch.cuda.amp.autocast():                
+                        losses = modelD(0, reshape([real_B, fake_B, fake_B_raw, real_A, real_B_prev, fake_B_prev, flow, weight, flow_ref, conf_ref]))
+                else:
+                    losses = modelD(0, reshape([real_B, fake_B, fake_B_raw, real_A, real_B_prev, fake_B_prev, flow, weight, flow_ref, conf_ref]))
                 losses = [ torch.mean(x) if x is not None else 0 for x in losses ]
                 loss_dict = dict(zip(modelD.module.loss_names, losses))
 
@@ -74,8 +88,12 @@ def train():
                 # run discriminator for each temporal scale
                 loss_dict_T = []
                 for s in range(t_scales):                
-                    if frames_skipped[0][s] is not None:                        
-                        losses = modelD(s+1, [frame_skipped[s] for frame_skipped in frames_skipped])
+                    if frames_skipped[0][s] is not None:
+                        if opt.use_amp:
+                            with torch.cuda.amp.autocast():                
+                                losses = modelD(s+1, [frame_skipped[s] for frame_skipped in frames_skipped])
+                        else:
+                            losses = modelD(s+1, [frame_skipped[s] for frame_skipped in frames_skipped])
                         losses = [ torch.mean(x) if not isinstance(x, int) else x for x in losses ]
                         loss_dict_T.append(dict(zip(modelD.module.loss_names_T, losses)))
 
@@ -84,14 +102,14 @@ def train():
 
                 ###################################### Backward Pass #################################                 
                 # update generator weights     
-                loss_backward(opt, loss_G, optimizer_G)                
+                loss_backward(opt, loss_G, optimizer_G, scaler)                
 
                 # update individual discriminator weights                
-                loss_backward(opt, loss_D, optimizer_D)
+                loss_backward(opt, loss_D, optimizer_D, scaler)
 
                 # update temporal discriminator weights
                 for s in range(t_scales_act):                    
-                    loss_backward(opt, loss_D_T[s], optimizer_D_T[s])
+                    loss_backward(opt, loss_D_T[s], optimizer_D_T[s], scaler)
 
                 if i == 0: fake_B_first = fake_B[0, 0]   # the first generated image in this sequence
 
@@ -114,7 +132,7 @@ def train():
                 visualizer.display_current_results(visuals, epoch, total_steps)
 
             ### save latest model
-            save_models(opt, epoch, epoch_iter, total_steps, visualizer, iter_path, modelG, modelD)            
+            save_models(opt, epoch, epoch_iter, total_steps, visualizer, iter_path, modelG, modelD, scaler)            
             if epoch_iter > dataset_size - opt.batchSize:
                 epoch_iter = 0
                 break
@@ -125,18 +143,23 @@ def train():
               (epoch, opt.niter + opt.niter_decay, time.time() - epoch_start_time))
 
         ### save model for this epoch and update model params
-        save_models(opt, epoch, epoch_iter, total_steps, visualizer, iter_path, modelG, modelD, end_of_epoch=True)
+        save_models(opt, epoch, epoch_iter, total_steps, visualizer, iter_path, modelG, modelD, scaler, end_of_epoch=True)
         update_models(opt, epoch, modelG, modelD, data_loader) 
 
-def loss_backward(opt, loss, optimizer):
+def loss_backward(opt, loss, optimizer, scaler=None):
     optimizer.zero_grad()                
-    if opt.fp16:
-        from apex import amp
-        with amp.scale_loss(loss, optimizer) as scaled_loss: 
-            scaled_loss.backward()
+    # if opt.fp16:
+    #     from apex import amp
+    #     with amp.scale_loss(loss, optimizer) as scaled_loss: 
+    #         scaled_loss.backward()
+    #     optimizer.step()
+    if opt.use_amp:
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
     else:
         loss.backward()
-    optimizer.step()
+        optimizer.step()
 
 def reshape(tensors):
     if tensors is None: return None
