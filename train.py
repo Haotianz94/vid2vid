@@ -67,8 +67,12 @@ def train():
                 ### individual frame discriminator          
                 real_B_prev, real_B = real_Bp[:, :-1], real_Bp[:, 1:]   # the collection of previous and current real frames
                 
-                flow_ref, conf_ref = flowNet(real_B, real_B_prev)       # reference flows and confidences 
-                
+                if opt.use_amp:
+                    with torch.cuda.amp.autocast(): 
+                        flow_ref, conf_ref = flowNet(real_B, real_B_prev)       # reference flows and confidences 
+                else:
+                    flow_ref, conf_ref = flowNet(real_B, real_B_prev)       # reference flows and confidences 
+
                 fake_B_prev = modelG.module.compute_fake_B_prev(real_B_prev, fake_B_prev_last, fake_B)
                 fake_B_prev_last = fake_B_last
                 
@@ -82,8 +86,13 @@ def train():
 
                 ### temporal discriminator                
                 # get skipped frames for each temporal scale
-                frames_all, frames_skipped = modelD.module.get_all_skipped_frames(frames_all, \
-                        real_B, fake_B, flow_ref, conf_ref, t_scales, tD, n_frames_load, i, flowNet)                                
+                if opt.use_amp:
+                    with torch.cuda.amp.autocast(): 
+                        frames_all, frames_skipped = modelD.module.get_all_skipped_frames(frames_all, \
+                                real_B, fake_B, flow_ref, conf_ref, t_scales, tD, n_frames_load, i, flowNet)   
+                else:
+                    frames_all, frames_skipped = modelD.module.get_all_skipped_frames(frames_all, \
+                            real_B, fake_B, flow_ref, conf_ref, t_scales, tD, n_frames_load, i, flowNet)                         
 
                 # run discriminator for each temporal scale
                 loss_dict_T = []

@@ -136,8 +136,11 @@ class Vid2VidModelD(BaseModel):
         loss_G_VGG = (self.criterionVGG(fake_B, real_B) * lambda_feat) if not self.opt.no_vgg else torch.zeros_like(loss_W)
         loss_D_real, loss_D_fake, loss_G_GAN, loss_G_GAN_Feat = self.compute_loss_D(self.netD, real_A, real_B, fake_B)
         ### Warp loss
-        fake_B_warp_ref = self.resample(fake_B_prev, flow_ref)
-        loss_G_Warp = self.criterionWarp(fake_B, fake_B_warp_ref.detach(), conf_ref) * lambda_T
+        if flow is not None:
+            fake_B_warp_ref = self.resample(fake_B_prev, flow_ref)
+            loss_G_Warp = self.criterionWarp(fake_B, fake_B_warp_ref.detach(), conf_ref) * lambda_T
+        else:
+            loss_G_Warp = torch.zeros_like(conf_ref)
         
         if fake_B_raw is not None:
             if not self.opt.no_vgg:
@@ -241,7 +244,9 @@ class Vid2VidModelD(BaseModel):
                 real_B_all, real_B_skipped = get_skipped_frames(real_B_all, real_B, t_scales, tD)
                 fake_B_all, fake_B_skipped = get_skipped_frames(fake_B_all, fake_B, t_scales, tD)                
                 flow_ref_all, conf_ref_all, flow_ref_skipped, conf_ref_skipped = get_skipped_flows(flowNet, 
-                    flow_ref_all, conf_ref_all, real_B_skipped, flow_ref, conf_ref, t_scales, tD)    
+                    flow_ref_all, conf_ref_all, real_B_skipped, flow_ref, conf_ref, t_scales, tD)
+        else:
+            real_B_skipped, fake_B_skipped, flow_ref_skipped, conf_ref_skipped = None, None, None, None    
         frames_all = real_B_all, fake_B_all, flow_ref_all, conf_ref_all
         frames_skipped = real_B_skipped, fake_B_skipped, flow_ref_skipped, conf_ref_skipped
         return frames_all, frames_skipped

@@ -172,7 +172,7 @@ class Vid2VidModelG(BaseModel):
                 mask_F = self.compute_mask(real_As, t+tG-1) if self.opt.fg else None
                 use_raw_only = self.opt.no_first_img and is_first_frame 
 
-                ### network forward                                                
+                ### network forward 
                 fake_B, flow, weight, fake_B_raw, fake_B_feat, flow_feat, fake_B_fg_feat \
                     = netG[s][net_id].forward(real_As_reshaped, fake_B_prevs_reshaped, mask_F, 
                                               fake_B_feat, flow_feat, fake_B_fg_feat, use_raw_only)
