@@ -69,8 +69,6 @@ class BaseOptions():
         self.parser.add_argument('--random_scale_points', action='store_true', help='randomly scale face keypoints a bit to create different results')
 
         # pose specific
-        self.parser.add_argument('--pose_input_format', type=str, default='', help='format of input pose')
-        self.parser.add_argument('--use_relight', action='store_true', help='use relighted images as B')
         self.parser.add_argument('--densepose_only', action='store_true', help='use only densepose as input')
         self.parser.add_argument('--openpose_only', action='store_true', help='use only openpose as input') 
         self.parser.add_argument('--add_face_disc', action='store_true', help='add face discriminator') 
@@ -78,13 +76,19 @@ class BaseOptions():
         self.parser.add_argument('--random_drop_prob', type=float, default=0.05, help='the probability to randomly drop each pose segment during training')
         self.parser.add_argument('--basic_point_only', action='store_true', help='only use basic joint keypoints for openpose, without hand or face keypoints')
         
+        # vid2player specific
+        self.parser.add_argument('--pose_input_format', type=str, default='', help='format of input pose')
+        self.parser.add_argument('--pose_input', type=str, default='body', help='content of input pose')
+        self.parser.add_argument('--add_input_noise', type=str, default='none', help='how much noise added to input')
+        self.parser.add_argument('--use_relight', action='store_true', help='use relighted images as B')
+        self.parser.add_argument('-f', type=str, default='', help='hack_for_jupyter_notebooks')
+
         # miscellaneous                
         self.parser.add_argument('--load_pretrain', type=str, default='', help='if specified, load the pretrained model')                
         self.parser.add_argument('--debug', action='store_true', help='if specified, use small dataset for debug')
         self.parser.add_argument('--fp16', action='store_true', default=False, help='train with AMP')
         self.parser.add_argument('--use_amp', action='store_true', default=False, help='train with torch.cuda.amp')
         self.parser.add_argument('--local_rank', type=int, default=0, help='local rank for distributed training')
-        self.parser.add_argument('-f', type=str, default='', help='hack_for_jupyter_notebooks')
 
         self.initialized = True
 

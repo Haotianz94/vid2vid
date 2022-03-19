@@ -19,7 +19,7 @@ class PoseDataset(BaseDataset):
         self.dir_dp = os.path.join(opt.dataroot, opt.phase + '_densepose')
         self.dir_op = os.path.join(opt.dataroot, opt.phase + '_openpose')
         self.dir_bg = os.path.join(opt.dataroot, opt.phase + '_bg')                
-        self.dir_kp = os.path.join(opt.dataroot, opt.phase + '_keypoints_17')
+        self.dir_kp = os.path.join(opt.dataroot, opt.phase + '_keypoints')
         if opt.use_relight:
             self.dir_img = os.path.join(opt.dataroot, opt.phase + '_img_relight')
         else:
@@ -30,13 +30,14 @@ class PoseDataset(BaseDataset):
             self.dir_stick = os.path.join(opt.dataroot, opt.phase + '_stickonbg')                
             self.stick_paths = sorted(make_grouped_dataset(self.dir_stick))
             check_path_valid(self.stick_paths, self.img_paths)
+        # No longer load pre-rendered stick images
+        # elif self.opt.pose_input_format == 'stick_with_bg':
+        #     self.dir_stick = os.path.join(opt.dataroot, opt.phase + '_stickonblack')                
+        #     self.stick_paths = sorted(make_grouped_dataset(self.dir_stick))
+        #     check_path_valid(self.stick_paths, self.img_paths)
+        #     self.bg_paths = sorted(make_grouped_dataset(self.dir_bg))
+        #     check_path_valid(self.bg_paths, self.img_paths)
         elif self.opt.pose_input_format == 'stick_with_bg':
-            self.dir_stick = os.path.join(opt.dataroot, opt.phase + '_stickonblack')                
-            self.stick_paths = sorted(make_grouped_dataset(self.dir_stick))
-            check_path_valid(self.stick_paths, self.img_paths)
-            self.bg_paths = sorted(make_grouped_dataset(self.dir_bg))
-            check_path_valid(self.bg_paths, self.img_paths)
-        elif self.opt.pose_input_format == 'stick_noisy_with_bg':
             self.kp_paths = sorted(make_grouped_dataset(self.dir_kp))
             check_path_valid(self.kp_paths, self.img_paths)
             self.bg_paths = sorted(make_grouped_dataset(self.dir_bg))
@@ -70,13 +71,14 @@ class PoseDataset(BaseDataset):
             if self.opt.pose_input_format == 'stick_on_bg':
                 stick_path = self.stick_paths[seq_idx][start_idx + i * t_step]
                 Ai = self.get_image(stick_path, size, params, input_type='img')
+            # No longer load pre-rendered stick images
+            # elif self.opt.pose_input_format == 'stick_with_bg':
+            #     stick_path = self.stick_paths[seq_idx][start_idx + i * t_step]
+            #     Si = self.get_image(stick_path, size, params, input_type='img')
+            #     bg_path = self.bg_paths[seq_idx][start_idx + i * t_step]
+            #     Bi = self.get_image(bg_path, size, params, input_type='img')
+            #     Ai = torch.cat([Bi, Si])
             elif self.opt.pose_input_format == 'stick_with_bg':
-                stick_path = self.stick_paths[seq_idx][start_idx + i * t_step]
-                Si = self.get_image(stick_path, size, params, input_type='img')
-                bg_path = self.bg_paths[seq_idx][start_idx + i * t_step]
-                Bi = self.get_image(bg_path, size, params, input_type='img')
-                Ai = torch.cat([Bi, Si])
-            elif self.opt.pose_input_format == 'stick_noisy_with_bg':
                 kp_path = self.kp_paths[seq_idx][start_idx + i * t_step]
                 Si = self.get_image(kp_path, size, params, input_type='stick')
                 bg_path = self.bg_paths[seq_idx][start_idx + i * t_step]
@@ -132,8 +134,18 @@ class PoseDataset(BaseDataset):
             return torch.from_numpy(A_img.transpose(2, 0, 1)).float()
         elif input_type == 'stick':
             kps = np.array(json.load(open(A_path, 'r')))
-            kps_noise = np.clip(np.random.normal(0, 5, kps.shape[0] * kps.shape[1]), -10, 10).reshape(kps.shape[0], -1)
-            A_img_np = make_stick_figures(size[0], size[1], kps + kps_noise)
+            if self.opt.add_input_noise != 'none':
+                if self.opt.add_input_noise == 'sigma5,cap10':
+                    kps_noise = np.clip(np.random.normal(0, 5, kps.shape[0] * kps.shape[1]), -10, 10).reshape(kps.shape[0], -1)
+                elif self.opt.add_input_noise == 'sigma3,cap5':
+                    kps_noise = np.clip(np.random.normal(0, 3, kps.shape[0] * kps.shape[1]), -5, 5).reshape(kps.shape[0], -1)
+                else:
+                    raise Exception("Not support option: add_input_noise="+self.opt.add_input_noise)
+                kps = kps + kps_noise
+                
+            A_img_np = make_stick_figures(size[0], size[1], kps, 
+                draw_feet=True if 'feet' in self.opt.pose_input else False,
+                draw_racket=True if 'racket' in self.opt.pose_input else False)
             A_img = Image.fromarray(A_img_np[:, :, ::-1])
         else:
             A_img = Image.open(A_path).convert('RGB')

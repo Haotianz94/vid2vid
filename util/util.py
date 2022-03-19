@@ -254,7 +254,7 @@ def make_joint_heatmaps(img_width, img_height, kps, sigma=7/4.0, method='edt'):
     return canvas
 
 
-def make_stick_figures(img_width, img_height, kps):
+def make_stick_figures(img_width, img_height, kps, draw_feet=False, draw_racket=False):
     class Pose:
         """
         DCPose Body 17
@@ -276,6 +276,12 @@ def make_stick_figures(img_width, img_height, kps):
         RKnee = 14
         LAnkle = 15
         RAnkle = 16
+        LToe = 17
+        LHeel = 18
+        RToe = 19
+        RHeel = 20
+        RacketHead = 21
+        RacketTail = 22
 
 
     shift = np.array([0, 0])
@@ -294,22 +300,40 @@ def make_stick_figures(img_width, img_height, kps):
         [Pose.RShoulder, Pose.LShoulder],
         [Pose.RHip, Pose.LHip],
     ]
+    if draw_feet:
+        kp_lines += [
+        [Pose.LAnkle, Pose.LToe],
+        [Pose.LAnkle, Pose.LHeel],
+        [Pose.RAnkle, Pose.RToe],
+        [Pose.RAnkle, Pose.RHeel],
+        ]
+    if draw_racket:
+        kp_lines += [
+        [Pose.RacketHead, Pose.RacketTail],
+        ]
    
     # Hand crafted colors that are different from court background
     colors = [
-       [127, 0,   0],
-       [127, 127, 0],
-       [127, 0,   127],
-       [0,   127, 0],
-       [255, 255, 127],
-       [0,   255, 0],
-       [255, 127, 127],
-       [255, 0,   0],
-       [0,   0,   255],
-       [0,   0,   255],
-       [255, 0,   255],
-       [0,   127, 255]]
-      
+        [255, 0,   255],
+        [0,   127, 255],
+        [127, 0,   0],
+        [127, 127, 0],
+        [127, 0,   127],
+        [0,   127, 0],
+        [255, 255, 127],
+        [0,   255, 0],
+        [255, 127, 127],
+        [255, 0,   0],
+        [0,   0,   255],
+        [0,   0,   255],
+       
+        [0, 0, 200],
+        [0, 0, 200],
+        [0, 127, 255],
+        [0, 127, 255],
+        [127, 127, 127],
+    ]
+
     kp_mask = np.zeros((img_height, img_width, 3), dtype=np.uint8)
 
     # Draw mid shoulder / mid hip first for better visualization.
@@ -322,10 +346,10 @@ def make_stick_figures(img_width, img_height, kps):
     nose_idx = Pose.Nose
     cv2.line(
         kp_mask, tuple(mid_shoulder.astype(np.int)), tuple((kps[:2, nose_idx] + shift).astype(np.int)),
-        color=colors[len(kp_lines)], thickness=line_thick, lineType=cv2.LINE_AA)
+        color=colors[0], thickness=line_thick, lineType=cv2.LINE_AA)
     cv2.line(
         kp_mask, tuple(mid_shoulder.astype(np.int)), tuple(mid_hip.astype(np.int)),
-        color=colors[len(kp_lines) + 1], thickness=line_thick, lineType=cv2.LINE_AA)
+        color=colors[1], thickness=line_thick, lineType=cv2.LINE_AA)
 
     # Draw the keypoints.
     for l in range(len(kp_lines)):
@@ -333,14 +357,16 @@ def make_stick_figures(img_width, img_height, kps):
         i2 = kp_lines[l][1]
         p1 = tuple((kps[:2, i1] + shift).astype(np.int))
         p2 = tuple((kps[:2, i2] + shift).astype(np.int))
-        cv2.line(
-            kp_mask, p1, p2,
-            color=colors[l], thickness=line_thick, lineType=cv2.LINE_AA)
-        cv2.circle(
-            kp_mask, p1,
-            radius=dot_radius, color=colors[l], thickness=-1, lineType=cv2.LINE_AA)
-        cv2.circle(
-            kp_mask, p2,
-            radius=dot_radius, color=colors[l], thickness=-1, lineType=cv2.LINE_AA)
-
+        if p1[0] > 0 and p2[0] > 0:
+            cv2.line(
+                kp_mask, p1, p2,
+                color=colors[l+2], thickness=line_thick, lineType=cv2.LINE_AA)
+        if p1[0] > 0:
+            cv2.circle(
+                kp_mask, p1,
+                radius=dot_radius, color=colors[l+2], thickness=-1, lineType=cv2.LINE_AA)
+        if p2[0] > 0:
+            cv2.circle(
+                kp_mask, p2,
+                radius=dot_radius, color=colors[l+2], thickness=-1, lineType=cv2.LINE_AA)
     return kp_mask
