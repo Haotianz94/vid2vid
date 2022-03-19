@@ -3,13 +3,10 @@ import torchvision.transforms as transforms
 import torch
 from PIL import Image
 import numpy as np
-import json
 
 from data.base_dataset import BaseDataset, get_img_params, get_transform, get_video_params, concat_frame
 from data.image_folder import make_grouped_dataset, check_path_valid
 from data.keypoint2img import read_keypoints
-from util.util import make_joint_heatmaps, make_stick_figures
-
 
 class PoseDataset(BaseDataset):
     def initialize(self, opt):
@@ -18,42 +15,14 @@ class PoseDataset(BaseDataset):
 
         self.dir_dp = os.path.join(opt.dataroot, opt.phase + '_densepose')
         self.dir_op = os.path.join(opt.dataroot, opt.phase + '_openpose')
-        self.dir_bg = os.path.join(opt.dataroot, opt.phase + '_bg')                
-        self.dir_kp = os.path.join(opt.dataroot, opt.phase + '_keypoints')
-        if opt.use_relight:
-            self.dir_img = os.path.join(opt.dataroot, opt.phase + '_img_relight')
-        else:
-            self.dir_img = os.path.join(opt.dataroot, opt.phase + '_img_real')
-        print('Using trainB images from', self.dir_img)
+        self.dir_img = os.path.join(opt.dataroot, opt.phase + '_img')                
         self.img_paths = sorted(make_grouped_dataset(self.dir_img))
-        if self.opt.pose_input_format == 'stick_on_bg':
-            self.dir_stick = os.path.join(opt.dataroot, opt.phase + '_stickonbg')                
-            self.stick_paths = sorted(make_grouped_dataset(self.dir_stick))
-            check_path_valid(self.stick_paths, self.img_paths)
-        # No longer load pre-rendered stick images
-        # elif self.opt.pose_input_format == 'stick_with_bg':
-        #     self.dir_stick = os.path.join(opt.dataroot, opt.phase + '_stickonblack')                
-        #     self.stick_paths = sorted(make_grouped_dataset(self.dir_stick))
-        #     check_path_valid(self.stick_paths, self.img_paths)
-        #     self.bg_paths = sorted(make_grouped_dataset(self.dir_bg))
-        #     check_path_valid(self.bg_paths, self.img_paths)
-        elif self.opt.pose_input_format == 'stick_with_bg':
-            self.kp_paths = sorted(make_grouped_dataset(self.dir_kp))
-            check_path_valid(self.kp_paths, self.img_paths)
-            self.bg_paths = sorted(make_grouped_dataset(self.dir_bg))
-            check_path_valid(self.bg_paths, self.img_paths)
-        elif self.opt.pose_input_format == 'heatmap_with_bg':
-            self.kp_paths = sorted(make_grouped_dataset(self.dir_kp))
-            check_path_valid(self.kp_paths, self.img_paths)
-            self.bg_paths = sorted(make_grouped_dataset(self.dir_bg))
-            check_path_valid(self.bg_paths, self.img_paths)
-        else:
-            if not opt.openpose_only:
-                self.dp_paths = sorted(make_grouped_dataset(self.dir_dp))
-                check_path_valid(self.dp_paths, self.img_paths)
-            if not opt.densepose_only:
-                self.op_paths = sorted(make_grouped_dataset(self.dir_op))                
-                check_path_valid(self.op_paths, self.img_paths)
+        if not opt.openpose_only:
+            self.dp_paths = sorted(make_grouped_dataset(self.dir_dp))
+            check_path_valid(self.dp_paths, self.img_paths)
+        if not opt.densepose_only:
+            self.op_paths = sorted(make_grouped_dataset(self.dir_op))                
+            check_path_valid(self.op_paths, self.img_paths)
 
         self.init_frame_idx(self.img_paths)
 
@@ -68,49 +37,24 @@ class PoseDataset(BaseDataset):
 
         frame_range = list(range(n_frames_total)) if (self.opt.isTrain or self.A is None) else [self.opt.n_frames_G-1]
         for i in frame_range:
-            if self.opt.pose_input_format == 'stick_on_bg':
-                stick_path = self.stick_paths[seq_idx][start_idx + i * t_step]
-                Ai = self.get_image(stick_path, size, params, input_type='img')
-            # No longer load pre-rendered stick images
-            # elif self.opt.pose_input_format == 'stick_with_bg':
-            #     stick_path = self.stick_paths[seq_idx][start_idx + i * t_step]
-            #     Si = self.get_image(stick_path, size, params, input_type='img')
-            #     bg_path = self.bg_paths[seq_idx][start_idx + i * t_step]
-            #     Bi = self.get_image(bg_path, size, params, input_type='img')
-            #     Ai = torch.cat([Bi, Si])
-            elif self.opt.pose_input_format == 'stick_with_bg':
-                kp_path = self.kp_paths[seq_idx][start_idx + i * t_step]
-                Si = self.get_image(kp_path, size, params, input_type='stick')
-                bg_path = self.bg_paths[seq_idx][start_idx + i * t_step]
-                Bi = self.get_image(bg_path, size, params, input_type='img')
-                Ai = torch.cat([Bi, Si])
-            elif self.opt.pose_input_format == 'heatmap_with_bg':
-                bg_path = self.bg_paths[seq_idx][start_idx + i * t_step]
-                Bi = self.get_image(bg_path, size, params, input_type='img')
-                kp_path = self.kp_paths[seq_idx][start_idx + i * t_step]
-                Hi = self.get_image(kp_path, size, params, input_type='heatmap')
-                Ai = torch.cat([Hi, Bi])
-            else:
-                if not self.opt.openpose_only:
-                    dp_path = self.dp_paths[seq_idx][start_idx + i * t_step]
-                    Di = self.get_image(dp_path, size, params, input_type='densepose')
-                    Di[2,:,:] = ((Di[2,:,:] * 0.5 + 0.5) * 255 / 24 - 0.5) / 0.5
-                if not self.opt.densepose_only:
-                    op_path = self.op_paths[seq_idx][start_idx + i * t_step]
-                    Oi = self.get_image(op_path, size, params, input_type='openpose')
-
-                if self.opt.openpose_only:
-                    Ai = Oi
-                elif self.opt.densepose_only:
-                    Ai = Di
-                else:
-                    Ai = torch.cat([Di, Oi])
-
             img_path = img_paths[start_idx + i * t_step]
+            if not self.opt.openpose_only:
+                dp_path = self.dp_paths[seq_idx][start_idx + i * t_step]
+                Di = self.get_image(dp_path, size, params, input_type='densepose')
+                Di[2,:,:] = ((Di[2,:,:] * 0.5 + 0.5) * 255 / 24 - 0.5) / 0.5
+            if not self.opt.densepose_only:
+                op_path = self.op_paths[seq_idx][start_idx + i * t_step]
+                Oi = self.get_image(op_path, size, params, input_type='openpose')
+
+            if self.opt.openpose_only:
+                Ai = Oi
+            elif self.opt.densepose_only:
+                Ai = Di
+            else:
+                Ai = torch.cat([Di, Oi])
             Bi = self.get_image(img_path, size, params, input_type='img')
             
-            # Ai, Bi = self.crop(Ai), self.crop(Bi) # only crop the central half region to save time
-
+            Ai, Bi = self.crop(Ai), self.crop(Bi) # only crop the central half region to save time
             A = concat_frame(A, Ai, n_frames_total)
             B = concat_frame(B, Bi, n_frames_total)
         
@@ -123,32 +67,11 @@ class PoseDataset(BaseDataset):
         return return_list
 
     def get_image(self, A_path, size, params, input_type):
-        if input_type == 'openpose':            
-            random_drop_prob = self.opt.random_drop_prob if self.opt.isTrain else 0
-            A_img = Image.fromarray(read_keypoints(A_path, size, random_drop_prob, self.opt.remove_face_labels, self.opt.basic_point_only)) 
-        elif input_type == 'heatmap':
-            A_img = make_joint_heatmaps(size[0], size[1], np.array(json.load(open(A_path, 'r'))))
-            if 'crop' in self.opt.resize_or_crop:
-                A_img = A_img[params['crop_pos'][0] : params['crop_pos'][0] + params['crop_size'][0],
-                              params['crop_pos'][1] : params['crop_pos'][1] + params['crop_size'][1]]
-            return torch.from_numpy(A_img.transpose(2, 0, 1)).float()
-        elif input_type == 'stick':
-            kps = np.array(json.load(open(A_path, 'r')))
-            if self.opt.add_input_noise != 'none':
-                if self.opt.add_input_noise == 'sigma5,cap10':
-                    kps_noise = np.clip(np.random.normal(0, 5, kps.shape[0] * kps.shape[1]), -10, 10).reshape(kps.shape[0], -1)
-                elif self.opt.add_input_noise == 'sigma3,cap5':
-                    kps_noise = np.clip(np.random.normal(0, 3, kps.shape[0] * kps.shape[1]), -5, 5).reshape(kps.shape[0], -1)
-                else:
-                    raise Exception("Not support option: add_input_noise="+self.opt.add_input_noise)
-                kps = kps + kps_noise
-                
-            A_img_np = make_stick_figures(size[0], size[1], kps, 
-                draw_feet=True if 'feet' in self.opt.pose_input else False,
-                draw_racket=True if 'racket' in self.opt.pose_input else False)
-            A_img = Image.fromarray(A_img_np[:, :, ::-1])
-        else:
+        if input_type != 'openpose':
             A_img = Image.open(A_path).convert('RGB')
+        else:            
+            random_drop_prob = self.opt.random_drop_prob if self.opt.isTrain else 0
+            A_img = Image.fromarray(read_keypoints(A_path, size, random_drop_prob, self.opt.remove_face_labels, self.opt.basic_point_only))            
 
         if input_type == 'densepose' and self.opt.isTrain:
             # randomly remove labels

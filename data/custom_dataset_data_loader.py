@@ -16,6 +16,9 @@ def CreateDataset(opt):
     elif opt.dataset_mode == 'test':
         from data.test_dataset import TestDataset
         dataset = TestDataset()
+    elif opt.dataset_mode == 'vid2player':
+        from data.vid2player_dataset import Vid2playerDataset
+        dataset = Vid2playerDataset()
     else:
         raise ValueError("Dataset [%s] not recognized." % opt.dataset_mode)
 
