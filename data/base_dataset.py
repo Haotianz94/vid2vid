@@ -39,7 +39,7 @@ class BaseDataset(data.Dataset):
 
     def update_frame_idx(self, A_paths, index):
         if self.opt.isTrain:
-            if self.opt.dataset_mode == 'pose':                
+            if self.opt.dataset_mode in ['pose', 'vid2player']:                
                 seq_idx = np.random.choice(len(A_paths), p=self.folder_prob) # randomly pick sequence to train
                 self.frame_idx = index
             else:    
@@ -124,7 +124,7 @@ def get_img_params(opt, size):
     else:
         new_w, new_h = make_power_2(new_w), make_power_2(new_h)
 
-    flip = (random.random() > 0.5) and (opt.dataset_mode != 'pose')
+    flip = (random.random() > 0.5) and (opt.dataset_mode not in ['pose', 'vid2player'])
     return {'new_size': (new_w, new_h), 'crop_size': (crop_w, crop_h), 'crop_pos': (crop_x, crop_y), 'flip': flip}
 
 def get_transform(opt, params, method=Image.BICUBIC, normalize=True, toTensor=True):
@@ -188,7 +188,7 @@ def get_video_params(opt, n_frames_total, cur_seq_len, index):
         max_t_step = min(opt.max_t_step, (cur_seq_len-1) // (n_frames_total-1))
         t_step = np.random.randint(max_t_step) + 1                    # spacing between neighboring sampled frames
         offset_max = max(1, cur_seq_len - (n_frames_total-1)*t_step)  # maximum possible index for the first frame        
-        if opt.dataset_mode == 'pose':
+        if opt.dataset_mode in ['pose', 'vid2player']:
             start_idx = index % offset_max
         else:
             start_idx = np.random.randint(offset_max)                 # offset for the first frame to load

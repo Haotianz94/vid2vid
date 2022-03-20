@@ -132,7 +132,11 @@ def init_params(opt, modelG, modelD, data_loader):
 
     return n_gpus, tG, tD, tDB, s_scales, t_scales, input_nc, output_nc, start_epoch, epoch_iter, print_freq, total_steps, iter_path
 
-def save_models(opt, epoch, epoch_iter, total_steps, visualizer, iter_path, modelG, modelD, scaler=None, end_of_epoch=False):
+def save_models(opt, epoch, epoch_iter, total_steps, visualizer, iter_path, modelG, modelD, scaler=None, end_of_epoch=False, update_best=False):
+    if update_best:
+        visualizer.vis_print('saving the best model (epoch %d, total_steps %d)' % (epoch, total_steps))
+        modelG.module.save('best')
+        np.savetxt(iter_path.replace('iter', 'iter_best'), (epoch, epoch_iter), delimiter=',', fmt='%d')
     if not end_of_epoch:
         if total_steps % opt.save_latest_freq == 0:
             visualizer.vis_print('saving the latest model (epoch %d, total_steps %d)' % (epoch, total_steps))

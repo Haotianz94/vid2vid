@@ -4,6 +4,7 @@ import time
 import os
 import torch
 from subprocess import call
+import copy
 
 from options.train_options import TrainOptions
 from data.data_loader import CreateDataLoader
@@ -19,11 +20,19 @@ def train():
         opt.print_freq = 1    
         opt.nThreads = 1
 
-    ### initialize dataset
-    data_loader = CreateDataLoader(opt)
-    dataset = data_loader.load_data()
-    dataset_size = len(data_loader)    
-    print('#training videos = %d' % dataset_size)
+    ### initialize dataset train and val
+    data_loader_train = CreateDataLoader(opt)
+    dataset_train = data_loader_train.load_data()
+    print('#training videos = %d' % len(data_loader_train))
+
+    if opt.eval_freq != 0:
+        opt_val = copy.deepcopy(opt)
+        opt_val.isTrain = False
+        opt_val.phase = 'val'
+        opt_val.start_frame = 0
+        data_loader_val = CreateDataLoader(opt_val)
+        dataset_val = data_loader_val.load_data()
+        print('#val videos = %d' % len(data_loader_val))
 
     ### initialize models
     models = create_model(opt)
@@ -35,25 +44,23 @@ def train():
 
     ### set parameters    
     n_gpus, tG, tD, tDB, s_scales, t_scales, input_nc, output_nc, \
-        start_epoch, epoch_iter, print_freq, total_steps, iter_path = init_params(opt, modelG, modelD, data_loader)
+        start_epoch, epoch_iter, print_freq, total_steps, iter_path = init_params(opt, modelG, modelD, data_loader_train)
     visualizer = Visualizer(opt)    
 
     ### real training starts here  
     for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
         epoch_start_time = time.time()    
-        for idx, data in enumerate(dataset, start=epoch_iter):        
+        for idx, data in enumerate(dataset_train, start=epoch_iter):        
             if total_steps % print_freq == 0:
                 iter_start_time = time.time()
             total_steps += opt.batchSize
             epoch_iter += opt.batchSize
 
-            # whether to collect output images
-            save_fake = total_steps % opt.display_freq == 0
-            n_frames_total, n_frames_load, t_len = data_loader.dataset.init_data_params(data, n_gpus, tG)
-            fake_B_prev_last, frames_all = data_loader.dataset.init_data(t_scales)
+            n_frames_total, n_frames_load, t_len = data_loader_train.dataset.init_data_params(data, n_gpus, tG)
+            fake_B_prev_last, frames_all = data_loader_train.dataset.init_data(t_scales)
 
             for i in range(0, n_frames_total, n_frames_load):
-                input_A, input_B, inst_A = data_loader.dataset.prepare_data(data, i, input_nc, output_nc)
+                input_A, input_B, inst_A = data_loader_train.dataset.prepare_data(data, i, input_nc, output_nc)
                 
                 ###################################### Forward Pass ##########################
                 ####### generator
@@ -136,12 +143,18 @@ def train():
                 visualizer.plot_current_errors(errors, total_steps)
 
             ### display output images
-            if save_fake:                
+            if total_steps % opt.display_freq == 0:                
                 visuals = util.save_all_tensors(opt, real_A, fake_B, fake_B_first, fake_B_raw, real_B, flow_ref, conf_ref, flow, weight, modelD)                
                 visualizer.display_current_results(visuals, epoch, total_steps)
 
+            ### run val
+            if opt.eval_freq != 0 and total_steps % opt.eval_freq == 0:
+                update_best = False
+                pass
+                # update_best = eval(dataset_val) 
+
             ### save latest model
-            save_models(opt, epoch, epoch_iter, total_steps, visualizer, iter_path, modelG, modelD, scaler)            
+            save_models(opt, epoch, epoch_iter, total_steps, visualizer, iter_path, modelG, modelD, scaler, update_best=update_best)            
             if epoch_iter > dataset_size - opt.batchSize:
                 epoch_iter = 0
                 break
@@ -153,7 +166,31 @@ def train():
 
         ### save model for this epoch and update model params
         save_models(opt, epoch, epoch_iter, total_steps, visualizer, iter_path, modelG, modelD, scaler, end_of_epoch=True)
-        update_models(opt, epoch, modelG, modelD, data_loader) 
+        update_models(opt, epoch, modelG, modelD, data_loader_train) 
+
+def eval(dataset):
+    for i, data in enumerate(dataset):
+        if data['change_seq']:
+            model.fake_B_prev = None
+
+        _, _, height, width = data['A'].size()
+        A = Variable(data['A']).view(1, -1, input_nc, height, width)
+        B = Variable(data['B']).view(1, -1, opt.output_nc, height, width) if len(data['B'].size()) > 2 else None
+        inst = Variable(data['inst']).view(1, -1, 1, height, width) if len(data['inst'].size()) > 2 else None
+        generated = model.inference(A, B, inst)
+        
+        if opt.label_nc != 0:
+            real_A = util.tensor2label(generated[1], opt.label_nc)
+        else:
+            c = 3 if opt.input_nc == 3 else 1
+            real_A = util.tensor2im(generated[1][:c], normalize=False)    
+            
+        visual_list = [('real_A', real_A), 
+                       ('fake_B', util.tensor2im(generated[0].data[0]))]
+        visuals = OrderedDict(visual_list) 
+        img_path = data['A_path']
+        print('process image... %s' % img_path)
+        visualizer.save_images(save_dir, visuals, img_path)
 
 def loss_backward(opt, loss, optimizer, scaler=None):
     optimizer.zero_grad()                

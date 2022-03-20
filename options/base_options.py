@@ -81,6 +81,7 @@ class BaseOptions():
         self.parser.add_argument('--pose_input', type=str, default='body', help='content of input pose')
         self.parser.add_argument('--add_input_noise', type=str, default='none', help='how much noise added to input')
         self.parser.add_argument('--use_relight', action='store_true', help='use relighted images as B')
+        self.parser.add_argument('--eval_freq', type=int, default=0, help='frequency for running eval')
         self.parser.add_argument('-f', type=str, default='', help='hack_for_jupyter_notebooks')
 
         # miscellaneous                

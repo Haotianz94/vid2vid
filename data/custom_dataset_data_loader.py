@@ -22,7 +22,7 @@ def CreateDataset(opt):
     else:
         raise ValueError("Dataset [%s] not recognized." % opt.dataset_mode)
 
-    print("dataset [%s] was created" % (dataset.name()))
+    print("dataset [%s] (%s) was created" % (dataset.name(), opt.phase))
     dataset.initialize(opt)
     return dataset
 
