@@ -148,14 +148,14 @@ def train():
                 visualizer.display_current_results(visuals, epoch, total_steps)
 
             ### run val
+            update_best = False
             if opt.eval_freq != 0 and total_steps % opt.eval_freq == 0:
-                update_best = False
                 pass
                 # update_best = eval(dataset_val) 
 
             ### save latest model
             save_models(opt, epoch, epoch_iter, total_steps, visualizer, iter_path, modelG, modelD, scaler, update_best=update_best)            
-            if epoch_iter > dataset_size - opt.batchSize:
+            if epoch_iter > len(data_loader_train) - opt.batchSize:
                 epoch_iter = 0
                 break
            
