@@ -117,11 +117,11 @@ class Vid2VidModelG(BaseModel):
         if input_A.get_device() == self.gpu_ids[0]:
             input_A, input_B, inst_A, fake_B_prev = util.remove_dummy_from_tensor([input_A, input_B, inst_A, fake_B_prev], dummy_bs)
             if input_A.size(0) == 0: return self.return_dummy(input_A)
-        real_A_all, real_B_all, _ = self.encode_input(input_A, input_B, inst_A)        
+        real_A_all, real_B_all, _ = self.encode_input(input_A, input_B, inst_A) # bs x tG x input_nc x h x w       
 
         is_first_frame = fake_B_prev is None
         if is_first_frame: # at the beginning of a sequence; needs to generate the first frame
-            fake_B_prev = self.generate_first_frame(real_A_all, real_B_all)                    
+            fake_B_prev = self.generate_first_frame(real_A_all, real_B_all) # bs x (tG-1) x 3 x h x w                   
                         
         netG = []
         for s in range(self.n_scales): # broadcast netG to all GPUs used for generator
@@ -131,8 +131,8 @@ class Vid2VidModelG(BaseModel):
 
         start_gpu = self.gpu_ids[1] if self.split_gpus else real_A_all.get_device()        
         fake_B, fake_B_raw, flow, weight = self.generate_frame_train(netG, real_A_all, fake_B_prev, start_gpu, is_first_frame)        
-        fake_B_prev = [B[:, -tG+1:].detach() for B in fake_B]
-        fake_B = [B[:, tG-1:] for B in fake_B]
+        fake_B_prev = [B[:, -tG+1:].detach() for B in fake_B] # bs x (tG-1) x 3 x h x w 
+        fake_B = [B[:, tG-1:] for B in fake_B] # bs x 1 x 3 x h x w
 
         return fake_B[0], fake_B_raw, flow, weight, real_A_all[:,tG-1:], real_B_all[:,tG-2:], fake_B_prev
 

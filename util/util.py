@@ -9,11 +9,13 @@ import collections
 from PIL import Image
 import cv2
 from collections import OrderedDict
+import matplotlib.pyplot as plt
+
 
 def save_all_tensors(opt, real_A, fake_B, fake_B_first, fake_B_raw, real_B, flow_ref, conf_ref, flow, weight, modelD):
     if opt.label_nc != 0:
         input_image = tensor2label(real_A, opt.label_nc)
-    elif opt.dataset_mode == 'pose':
+    elif opt.dataset_mode in ['pose', 'vid2player']:
         input_image = tensor2im(real_A)
         if real_A.size()[2] == 6:
             input_image = tensor2im(real_A[:, :, 3:])
@@ -370,3 +372,81 @@ def make_stick_figures(img_width, img_height, kps, draw_feet=False, draw_racket=
                 kp_mask, p2,
                 radius=dot_radius, color=colors[l+2], thickness=-1, lineType=cv2.LINE_AA)
     return kp_mask
+
+###############################################################################
+# Image visualization utils
+###############################################################################
+
+def imshow(img):
+    plt.figure()
+    plt.imshow(cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
+    plt.axis('off')
+
+def make_image_grid(images, nrow=1, padding=2, padding_color=(255, 255, 255)):
+    """
+    nrow: how many images will be in one row
+    """
+    def get_up_left_loc(idx):
+        x, y =  idx % nrow, idx // nrow
+        return x * (w + padding) + padding, y * (h + padding) + padding
+
+    ncol = int(np.ceil(len(images) / nrow))
+    h, w = images[0].shape[:2]
+    H, W = ncol * (h + padding) + padding, nrow * (w + padding) + padding
+    canvas = np.zeros((H, W, 3), dtype=np.uint8) + np.array(padding_color)
+    for idx, img in enumerate(images):
+        assert (h, w) == img.shape[:2]
+        x, y = get_up_left_loc(idx)
+        canvas[y : y + h, x : x + w] = img.copy()
+    return canvas.astype(np.uint8)
+
+def plot_image_grid(images_np, nrow=1, padding=2, padding_color=(255, 255, 255), 
+        factor=1, resize=None, imshow=True, output_path=None, post_process=None):
+    """Draws images in a grid
+    
+    Args:
+        images_np: list of images, each image is np.array of size 3xHxW of 1xHxW
+        nrow: how many images will be in one row
+        factor: size if the plt.figure 
+        interpolation: interpolation used in plt.imshow
+    """
+    import torch
+    import torchvision
+
+    if resize is not None:
+        images_np = [cv2.resize(img, resize) for img in images_np] 
+
+    # images_torch = [torch.from_numpy(img.transpose(2, 0, 1)) for img in images_np]
+    # grid = torchvision.utils.make_grid(images_torch, nrow, padding, pad_value=255).numpy().transpose(1, 2, 0).copy() 
+    grid = make_image_grid(images_np, nrow, padding, padding_color)
+
+    # without copy, cv2 functions does not work
+    if post_process:
+        grid = post_process(grid)
+    if imshow:
+        plt.figure(figsize=(3 + factor, 12 + factor))
+        plt.imshow(cv2.cvtColor(grid, cv2.COLOR_RGB2BGR))
+        plt.axis('off')
+        plt.show()
+
+    if output_path is not None:
+        cv2.imwrite(output_path, grid)
+
+    return grid
+
+def sequence_to_video(images, output_path, fps=25, remove_avi=True):
+    out = cv2.VideoWriter(output_path.replace('mp4', 'avi'), cv2.VideoWriter_fourcc('X','V','I','D'), fps, 
+                      (images[0].shape[1], images[0].shape[0]))
+    for image in images:
+        out.write(image)
+    out.release()
+
+    convert_cmd = "ffmpeg -y -i {} -c:v libx264 -preset slow -crf 17 -c:a copy {}".format(
+        output_path.replace('mp4', 'avi'), output_path)
+    ret = os.system(convert_cmd)
+    if ret == 0:
+        print("Dumped {} frames to {}".format(len(images), output_path))
+    else:
+        print("Dump video failed!!!".format(len(images)))
+    if remove_avi:
+        os.remove(output_path.replace('mp4', 'avi'))

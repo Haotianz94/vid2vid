@@ -110,8 +110,8 @@ class Vid2playerDataset(BaseDataset):
             if self.opt.add_input_noise != 'none':
                 if self.opt.add_input_noise == 'sigma5,cap10':
                     kps_noise = np.clip(np.random.normal(0, 5, kps.shape[0] * kps.shape[1]), -10, 10).reshape(kps.shape[0], -1)
-                elif self.opt.add_input_noise == 'sigma3,cap5':
-                    kps_noise = np.clip(np.random.normal(0, 3, kps.shape[0] * kps.shape[1]), -5, 5).reshape(kps.shape[0], -1)
+                elif self.opt.add_input_noise == 'sigma2,cap5':
+                    kps_noise = np.clip(np.random.normal(0, 2, kps.shape[0] * kps.shape[1]), -5, 5).reshape(kps.shape[0], -1)
                 else:
                     raise Exception("Not support option: add_input_noise="+self.opt.add_input_noise)
                 kps = kps + kps_noise

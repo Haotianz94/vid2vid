@@ -5,6 +5,8 @@ import os
 import torch
 from subprocess import call
 import copy
+from tqdm import tqdm
+import cv2
 
 from options.train_options import TrainOptions
 from data.data_loader import CreateDataLoader
@@ -23,16 +25,21 @@ def train():
     ### initialize dataset train and val
     data_loader_train = CreateDataLoader(opt)
     dataset_train = data_loader_train.load_data()
-    print('#training videos = %d' % len(data_loader_train))
+    print('#training video frames = %d' % len(data_loader_train))
 
     if opt.eval_freq != 0:
         opt_val = copy.deepcopy(opt)
         opt_val.isTrain = False
         opt_val.phase = 'val'
         opt_val.start_frame = 0
+        opt_val.nThreads = 1   # test code only supports nThreads = 1
+        opt_val.batchSize = 1  # test code only supports batchSize = 1
+        opt_val.serial_batches = True  # no shuffle
+        opt_val.no_flip = True  # no flip
         data_loader_val = CreateDataLoader(opt_val)
         dataset_val = data_loader_val.load_data()
-        print('#val videos = %d' % len(data_loader_val))
+        dataset_val.loss_best = 1e9
+        print('#val video frames = %d' % len(data_loader_val))
 
     ### initialize models
     models = create_model(opt)
@@ -80,7 +87,7 @@ def train():
                 else:
                     flow_ref, conf_ref = flowNet(real_B, real_B_prev)       # reference flows and confidences 
 
-                fake_B_prev = modelG.module.compute_fake_B_prev(real_B_prev, fake_B_prev_last, fake_B)
+                fake_B_prev = modelG.module.compute_fake_B_prev(real_B_prev, fake_B_prev_last, fake_B) # Haotian: need to figure out 
                 fake_B_prev_last = fake_B_last
                 
                 if opt.use_amp:
@@ -149,9 +156,9 @@ def train():
 
             ### run val
             update_best = False
+            assert opt.eval_freq == 0 or (opt.eval_freq // opt.save_latest_freq * opt.save_latest_freq == opt.eval_freq)
             if opt.eval_freq != 0 and total_steps % opt.eval_freq == 0:
-                pass
-                # update_best = eval(dataset_val) 
+                update_best = eval(modelG.module, dataset_val, visualizer) 
 
             ### save latest model
             save_models(opt, epoch, epoch_iter, total_steps, visualizer, iter_path, modelG, modelD, scaler, update_best=update_best)            
@@ -168,29 +175,59 @@ def train():
         save_models(opt, epoch, epoch_iter, total_steps, visualizer, iter_path, modelG, modelD, scaler, end_of_epoch=True)
         update_models(opt, epoch, modelG, modelD, data_loader_train) 
 
-def eval(dataset):
-    for i, data in enumerate(dataset):
+def eval(model, dataset, visualizer):
+    opt = model.opt
+    model.fake_B_prev = None
+    model.opt.isTrain = False
+    ReconLoss = torch.nn.L1Loss()
+
+    start_of_seq = 3
+    loss_sum = 0
+    frame_cnt = 0
+    frames = []
+    visualizer.vis_print("Running evaluation ...")
+    for i, data in tqdm(enumerate(dataset)):
         if data['change_seq']:
             model.fake_B_prev = None
+            start_of_seq = 3
 
         _, _, height, width = data['A'].size()
-        A = Variable(data['A']).view(1, -1, input_nc, height, width)
-        B = Variable(data['B']).view(1, -1, opt.output_nc, height, width) if len(data['B'].size()) > 2 else None
-        inst = Variable(data['inst']).view(1, -1, 1, height, width) if len(data['inst'].size()) > 2 else None
-        generated = model.inference(A, B, inst)
-        
-        if opt.label_nc != 0:
-            real_A = util.tensor2label(generated[1], opt.label_nc)
+        As = data['A'].view(1, -1, opt.input_nc, height, width)
+        Bs = data['B'].view(1, -1, opt.output_nc, height, width) if len(data['B'].size()) > 2 else None
+        inst = data['inst'].view(1, -1, 1, height, width) if len(data['inst'].size()) > 2 else None
+        generated = model.inference(As, Bs, inst)
+
+        real_B = Bs[0][-1].detach().to(generated[0].get_device()) # 3 x h x w    
+        fake_B = generated[0][0].detach() # 3 x h x w   
+
+        if start_of_seq == 0:
+            recon_loss = ReconLoss(real_B, fake_B)
+            loss_sum += recon_loss.item()
+            frame_cnt += 1
         else:
-            c = 3 if opt.input_nc == 3 else 1
-            real_A = util.tensor2im(generated[1][:c], normalize=False)    
-            
-        visual_list = [('real_A', real_A), 
-                       ('fake_B', util.tensor2im(generated[0].data[0]))]
-        visuals = OrderedDict(visual_list) 
-        img_path = data['A_path']
-        print('process image... %s' % img_path)
-        visualizer.save_images(save_dir, visuals, img_path)
+            start_of_seq -= 1
+
+        real_A = cv2.cvtColor(util.tensor2im(As[0][-1][3:]), cv2.COLOR_RGB2BGR)
+        real_B = cv2.cvtColor(util.tensor2im(real_B), cv2.COLOR_RGB2BGR)
+        fake_B = cv2.cvtColor(util.tensor2im(fake_B), cv2.COLOR_RGB2BGR)
+        frames.append(util.plot_image_grid([real_A, real_B, fake_B], nrow=3, imshow=False))
+
+        if i > 50:
+            break
+
+    loss = loss_sum / frame_cnt
+    update_best = False
+    if loss < dataset.loss_best:
+        util.sequence_to_video(frames, os.path.join(opt.checkpoints_dir, opt.name, 'val_best.mp4'), fps=25)
+        dataset.loss_best = loss
+        update_best = True
+        visualizer.vis_print("Average val loss {:.6f} < current best loss {:.6f}, updating best model ...".format(loss, dataset.loss_best))
+    else:
+        visualizer.vis_print("Average val loss {:.6f} > current best loss {:.6f}, not update best model ...".format(loss, dataset.loss_best))
+
+    model.fake_B_prev = None
+    model.opt.isTrain = True
+    return update_best
 
 def loss_backward(opt, loss, optimizer, scaler=None):
     optimizer.zero_grad()                
