@@ -212,9 +212,6 @@ def eval(model, dataset, visualizer):
         fake_B = cv2.cvtColor(util.tensor2im(fake_B), cv2.COLOR_RGB2BGR)
         frames.append(util.plot_image_grid([real_A, real_B, fake_B], nrow=3, imshow=False))
 
-        if i > 50:
-            break
-
     loss = loss_sum / frame_cnt
     update_best = False
     if loss < dataset.loss_best:

@@ -87,7 +87,7 @@ class Vid2VidModelG(BaseModel):
         size = input_map.size()
         self.bs, tG, self.height, self.width = size[0], size[1], size[3], size[4]
         
-        input_map = input_map.data.cuda()                
+        input_map = input_map.data.cuda() # Haotian: when using gpu_ids=[1,0], it will goes to cuda:0 in train but cuda:1 in eval               
         if self.opt.label_nc != 0:                        
             # create one-hot vector for label map             
             oneHot_size = (self.bs, tG, self.opt.label_nc, self.height, self.width)
