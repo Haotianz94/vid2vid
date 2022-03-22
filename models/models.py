@@ -104,11 +104,16 @@ def create_optimizer(opt, models):
 def init_params(opt, modelG, modelD, data_loader):
     iter_path = os.path.join(opt.checkpoints_dir, opt.name, 'iter.txt')
     start_epoch, epoch_iter = 1, 0
+    loss_best = 1e9
     ### if continue training, recover previous states
     if opt.continue_train:        
         if os.path.exists(iter_path):
             start_epoch, epoch_iter = np.loadtxt(iter_path , delimiter=',', dtype=int)        
-        print('Resuming from epoch %d at iteration %d' % (start_epoch, epoch_iter))   
+        print('Resuming from epoch %d at iteration %d' % (start_epoch, epoch_iter))  
+        iter_best_path = iter_path.replace('iter', 'iter_best')
+        if os.path.exists(iter_best_path):
+            best_epoch, best_iter, loss_best = np.loadtxt(iter_best_path, delimiter=',', dtype=float)
+            print('Current best model from epoch %d at iteration %d with loss %f' % (int(best_epoch), int(best_iter), loss_best))
         if start_epoch > opt.niter:
             modelG.module.update_learning_rate(start_epoch-1, 'G')
             modelD.module.update_learning_rate(start_epoch-1, 'D')
@@ -130,13 +135,13 @@ def init_params(opt, modelG, modelD, data_loader):
     total_steps = (start_epoch-1) * len(data_loader) + epoch_iter
     total_steps = total_steps // print_freq * print_freq  
 
-    return n_gpus, tG, tD, tDB, s_scales, t_scales, input_nc, output_nc, start_epoch, epoch_iter, print_freq, total_steps, iter_path
+    return n_gpus, tG, tD, tDB, s_scales, t_scales, input_nc, output_nc, start_epoch, epoch_iter, print_freq, total_steps, iter_path, loss_best
 
-def save_models(opt, epoch, epoch_iter, total_steps, visualizer, iter_path, modelG, modelD, scaler=None, end_of_epoch=False, update_best=False):
+def save_models(opt, epoch, epoch_iter, total_steps, visualizer, iter_path, modelG, modelD, scaler=None, end_of_epoch=False, update_best=False, loss_best=None):
     if update_best:
         visualizer.vis_print('saving the best model (epoch %d, total_steps %d)' % (epoch, total_steps))
         modelG.module.save('best')
-        np.savetxt(iter_path.replace('iter', 'iter_best'), (epoch, epoch_iter), delimiter=',', fmt='%d')
+        np.savetxt(iter_path.replace('iter', 'iter_best'), (epoch, epoch_iter, loss_best), delimiter=',', fmt='%f')
     if not end_of_epoch:
         if total_steps % opt.save_latest_freq == 0:
             visualizer.vis_print('saving the latest model (epoch %d, total_steps %d)' % (epoch, total_steps))

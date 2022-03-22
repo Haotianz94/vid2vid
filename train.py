@@ -51,8 +51,9 @@ def train():
 
     ### set parameters    
     n_gpus, tG, tD, tDB, s_scales, t_scales, input_nc, output_nc, \
-        start_epoch, epoch_iter, print_freq, total_steps, iter_path = init_params(opt, modelG, modelD, data_loader_train)
-    visualizer = Visualizer(opt)    
+        start_epoch, epoch_iter, print_freq, total_steps, iter_path, loss_best = init_params(opt, modelG, modelD, data_loader_train)
+    visualizer = Visualizer(opt)
+    dataset_val.loss_best = loss_best    
 
     ### real training starts here  
     for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
@@ -156,12 +157,12 @@ def train():
 
             ### run val
             update_best = False
-            assert opt.eval_freq == 0 or (opt.eval_freq // opt.save_latest_freq * opt.save_latest_freq == opt.eval_freq)
             if opt.eval_freq != 0 and total_steps % opt.eval_freq == 0:
                 update_best = eval(modelG.module, dataset_val, visualizer) 
 
             ### save latest model
-            save_models(opt, epoch, epoch_iter, total_steps, visualizer, iter_path, modelG, modelD, scaler, update_best=update_best)            
+            save_models(opt, epoch, epoch_iter, total_steps, visualizer, iter_path, modelG, modelD, scaler, 
+                update_best=update_best, loss_best=dataset_val.loss_best)            
             if epoch_iter > len(data_loader_train) - opt.batchSize:
                 epoch_iter = 0
                 break
@@ -196,9 +197,17 @@ def eval(model, dataset, visualizer):
         Bs = data['B'].view(1, -1, opt.output_nc, height, width) if len(data['B'].size()) > 2 else None
         inst = data['inst'].view(1, -1, 1, height, width) if len(data['inst'].size()) > 2 else None
         generated = model.inference(As, Bs, inst)
+        device = generated[0].get_device()
 
-        real_B = Bs[0][-1].detach().to(generated[0].get_device()) # 3 x h x w    
+        real_B = Bs[0][-1].detach().to(device) # 3 x h x w    
         fake_B = generated[0][0].detach() # 3 x h x w   
+
+        ### add color shift
+        assert opt.pose_input_format == 'stick_with_bg' # bg input is different when using heatmap 
+        diff = As[0][-1][:3].to(device) - fake_B
+        diff_crop = torch.cat((diff[:, :50], diff[:, -50:]), dim=1)
+        diff_avg = torch.mean(diff_crop.view(-1, 3), dim=0).unsqueeze(1).unsqueeze(1)
+        fake_B = torch.clamp(fake_B + diff_avg, 0, 1)
 
         if start_of_seq == 0:
             recon_loss = ReconLoss(real_B, fake_B)
@@ -216,9 +225,9 @@ def eval(model, dataset, visualizer):
     update_best = False
     if loss < dataset.loss_best:
         util.sequence_to_video(frames, os.path.join(opt.checkpoints_dir, opt.name, 'val_best.mp4'), fps=25)
+        visualizer.vis_print("Average val loss {:.6f} < current best loss {:.6f}, updating best model ...".format(loss, dataset.loss_best))
         dataset.loss_best = loss
         update_best = True
-        visualizer.vis_print("Average val loss {:.6f} < current best loss {:.6f}, updating best model ...".format(loss, dataset.loss_best))
     else:
         visualizer.vis_print("Average val loss {:.6f} > current best loss {:.6f}, not update best model ...".format(loss, dataset.loss_best))
 

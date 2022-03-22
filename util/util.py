@@ -9,6 +9,8 @@ import collections
 from PIL import Image
 import cv2
 from collections import OrderedDict
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 
