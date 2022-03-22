@@ -203,8 +203,7 @@ def eval(model, dataset, visualizer):
         fake_B = generated[0][0].detach() # 3 x h x w   
 
         ### add color shift
-        assert opt.pose_input_format == 'stick_with_bg' # bg input is different when using heatmap 
-        diff = As[0][-1][:3].to(device) - fake_B
+        diff = real_B - fake_B
         diff_crop = torch.cat((diff[:, :50], diff[:, -50:]), dim=1)
         diff_avg = torch.mean(diff_crop.view(-1, 3), dim=0).unsqueeze(1).unsqueeze(1)
         fake_B = torch.clamp(fake_B + diff_avg, 0, 1)
