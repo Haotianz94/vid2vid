@@ -222,7 +222,8 @@ def eval(model, dataset, visualizer):
 
     loss = loss_sum / frame_cnt
     update_best = False
-    if loss < dataset.loss_best:
+    eps = 0.0005
+    if loss < dataset.loss_best + eps:
         util.sequence_to_video(frames, os.path.join(opt.checkpoints_dir, opt.name, 'val_best.mp4'), fps=25)
         visualizer.vis_print("Average val loss {:.6f} < current best loss {:.6f}, updating best model ...".format(loss, dataset.loss_best))
         dataset.loss_best = loss
