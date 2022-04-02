@@ -82,7 +82,6 @@ class BaseOptions():
         self.parser.add_argument('--add_input_noise', type=str, default='none', help='how much noise added to input')
         self.parser.add_argument('--use_relight', action='store_true', help='use relighted images as B')
         self.parser.add_argument('--eval_freq', type=int, default=0, help='frequency for running eval')
-        self.parser.add_argument('-f', type=str, default='', help='hack_for_jupyter_notebooks')
 
         # miscellaneous                
         self.parser.add_argument('--load_pretrain', type=str, default='', help='if specified, load the pretrained model')                
@@ -105,7 +104,7 @@ class BaseOptions():
     def parse(self, save=True):
         if not self.initialized:
             self.initialize()
-        self.opt = self.parser.parse_args()
+        self.opt, self.unknown = self.parser.parse_known_args()
         self.opt.isTrain = self.isTrain   # train or test
         
         self.opt.fg_labels = self.parse_str(self.opt.fg_labels)

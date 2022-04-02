@@ -158,7 +158,7 @@ def train():
             ### run val
             update_best = False
             if opt.eval_freq != 0 and total_steps % opt.eval_freq == 0:
-                update_best = eval(modelG.module, dataset_val, visualizer) 
+                update_best = eval(modelG.module, dataset_val, visualizer, total_steps) 
 
             ### save latest model
             save_models(opt, epoch, epoch_iter, total_steps, visualizer, iter_path, modelG, modelD, scaler, 
@@ -176,7 +176,7 @@ def train():
         save_models(opt, epoch, epoch_iter, total_steps, visualizer, iter_path, modelG, modelD, scaler, end_of_epoch=True)
         update_models(opt, epoch, modelG, modelD, data_loader_train) 
 
-def eval(model, dataset, visualizer):
+def eval(model, dataset, visualizer, total_steps):
     opt = model.opt
     model.fake_B_prev = None
     model.opt.isTrain = False
@@ -230,6 +230,9 @@ def eval(model, dataset, visualizer):
         update_best = True
     else:
         visualizer.vis_print("Average val loss {:.6f} > current best loss {:.6f}, not update best model ...".format(loss, dataset.loss_best))
+
+    errors = {'val': loss}
+    visualizer.plot_current_errors(errors, total_steps)
 
     model.fake_B_prev = None
     model.opt.isTrain = True

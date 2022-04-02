@@ -9,9 +9,6 @@ import collections
 from PIL import Image
 import cv2
 from collections import OrderedDict
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 
 
 def save_all_tensors(opt, real_A, fake_B, fake_B_first, fake_B_raw, real_B, flow_ref, conf_ref, flow, weight, modelD):
@@ -379,11 +376,6 @@ def make_stick_figures(img_width, img_height, kps, draw_feet=False, draw_racket=
 # Image visualization utils
 ###############################################################################
 
-def imshow(img):
-    plt.figure()
-    plt.imshow(cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
-    plt.axis('off')
-
 def make_image_grid(images, nrow=1, padding=2, padding_color=(255, 255, 255)):
     """
     nrow: how many images will be in one row
@@ -403,7 +395,7 @@ def make_image_grid(images, nrow=1, padding=2, padding_color=(255, 255, 255)):
     return canvas.astype(np.uint8)
 
 def plot_image_grid(images_np, nrow=1, padding=2, padding_color=(255, 255, 255), 
-        factor=1, resize=None, imshow=True, output_path=None, post_process=None):
+        factor=1, resize=None, output_path=None, post_process=None):
     """Draws images in a grid
     
     Args:
@@ -425,11 +417,6 @@ def plot_image_grid(images_np, nrow=1, padding=2, padding_color=(255, 255, 255),
     # without copy, cv2 functions does not work
     if post_process:
         grid = post_process(grid)
-    if imshow:
-        plt.figure(figsize=(3 + factor, 12 + factor))
-        plt.imshow(cv2.cvtColor(grid, cv2.COLOR_RGB2BGR))
-        plt.axis('off')
-        plt.show()
 
     if output_path is not None:
         cv2.imwrite(output_path, grid)
