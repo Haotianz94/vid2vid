@@ -53,7 +53,8 @@ def train():
     n_gpus, tG, tD, tDB, s_scales, t_scales, input_nc, output_nc, \
         start_epoch, epoch_iter, print_freq, total_steps, iter_path, loss_best = init_params(opt, modelG, modelD, data_loader_train)
     visualizer = Visualizer(opt)
-    dataset_val.loss_best = loss_best    
+    if opt.eval_freq != 0:
+        dataset_val.loss_best = loss_best    
 
     ### real training starts here  
     for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
