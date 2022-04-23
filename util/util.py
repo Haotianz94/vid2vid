@@ -278,8 +278,8 @@ def make_stick_figures(img_width, img_height, kps, draw_feet=False, draw_racket=
         LAnkle = 15
         RAnkle = 16
         LToe = 17
-        LHeel = 18
-        RToe = 19
+        RToe = 18
+        LHeel = 19
         RHeel = 20
         RacketHead = 21
         RacketTail = 22
