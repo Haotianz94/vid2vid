@@ -218,7 +218,7 @@ def eval(model, dataset, visualizer, total_steps):
         real_A = cv2.cvtColor(util.tensor2im(As[0][-1][3:]), cv2.COLOR_RGB2BGR)
         real_B = cv2.cvtColor(util.tensor2im(real_B), cv2.COLOR_RGB2BGR)
         fake_B = cv2.cvtColor(util.tensor2im(fake_B), cv2.COLOR_RGB2BGR)
-        frames.append(util.plot_image_grid([real_A, real_B, fake_B], nrow=3, imshow=False))
+        frames.append(util.plot_image_grid([real_A, real_B, fake_B], nrow=3))
 
     loss = loss_sum / frame_cnt
     update_best = False
