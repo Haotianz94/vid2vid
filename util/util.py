@@ -430,7 +430,7 @@ def sequence_to_video(images, output_path, fps=25, remove_avi=True):
         out.write(image)
     out.release()
 
-    convert_cmd = "ffmpeg -y -i {} -c:v libx264 -preset slow -crf 17 -c:a copy {}".format(
+    convert_cmd = "ffmpeg -y -i {} -c:v libx264 -preset slow -crf 17 -c:a copy {} -loglevel quiet".format(
         output_path.replace('mp4', 'avi'), output_path)
     ret = os.system(convert_cmd)
     if ret == 0:
