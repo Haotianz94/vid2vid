@@ -158,12 +158,14 @@ def train():
 
             ### run val
             update_best = False
+            loss_best = None
             if opt.eval_freq != 0 and total_steps % opt.eval_freq == 0:
-                update_best = eval(modelG.module, dataset_val, visualizer, total_steps) 
+                update_best = eval(modelG.module, dataset_val, visualizer, total_steps)
+                loss_best = dataset_val.loss_best 
 
             ### save latest model
             save_models(opt, epoch, epoch_iter, total_steps, visualizer, iter_path, modelG, modelD, scaler, 
-                update_best=update_best, loss_best=dataset_val.loss_best)            
+                update_best=update_best, loss_best=loss_best)            
             if epoch_iter > len(data_loader_train) - opt.batchSize:
                 epoch_iter = 0
                 break
