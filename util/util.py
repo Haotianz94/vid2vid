@@ -16,9 +16,11 @@ def save_all_tensors(opt, real_A, fake_B, fake_B_first, fake_B_raw, real_B, flow
         input_image = tensor2label(real_A, opt.label_nc)
     elif opt.dataset_mode in ['pose', 'vid2player']:
         input_image = tensor2im(real_A)
-        if real_A.size()[2] == 6:
+        if opt.pose_input_format == 'stick_with_bg':
             input_image = tensor2im(real_A[:, :, 3:])
-        elif real_A.size()[2] == 17:
+        elif opt.pose_input_format == 'stick_on_bg':
+            input_image = tensor2im(real_A[:, :])
+        elif opt.pose_input_format == 'stick_with_heatmap':
             input_image = tensor2im(sum([real_A[:, :, i:i+1] for i in range(14)]), normalize=False)
     else:
         c = 3 if opt.input_nc >= 3 else 1
@@ -255,7 +257,7 @@ def make_joint_heatmaps(img_width, img_height, kps, sigma=7/4.0, method='edt'):
     return canvas
 
 
-def make_stick_figures(img_width, img_height, kps, draw_feet=False, draw_racket=False):
+def make_stick_figures(img_width, img_height, kps, background=None, draw_feet=False, draw_racket=False):
     class Pose:
         """
         DCPose Body 17
@@ -335,7 +337,10 @@ def make_stick_figures(img_width, img_height, kps, draw_feet=False, draw_racket=
         [127, 127, 127],
     ]
 
-    kp_mask = np.zeros((img_height, img_width, 3), dtype=np.uint8)
+    if background is None:
+        kp_mask = np.zeros((img_height, img_width, 3), dtype=np.uint8)
+    else:
+        kp_mask = background
 
     # Draw mid shoulder / mid hip first for better visualization.
     mid_shoulder = (

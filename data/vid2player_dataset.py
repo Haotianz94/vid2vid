@@ -1,9 +1,9 @@
-import os.path
-import torchvision.transforms as transforms
+import os
 import torch
 from PIL import Image
 import numpy as np
 import json
+import cv2
 
 from data.base_dataset import BaseDataset, get_img_params, get_transform, get_video_params, concat_frame
 from data.image_folder import make_grouped_dataset, check_path_valid
@@ -24,28 +24,24 @@ class Vid2playerDataset(BaseDataset):
             self.dir_img = os.path.join(opt.dataroot, opt.phase + '_img_real')
         print('Using trainB images from', self.dir_img)
         self.img_paths = sorted(make_grouped_dataset(self.dir_img))
-        if self.opt.pose_input_format == 'stick_on_bg':
-            self.dir_stick = os.path.join(opt.dataroot, opt.phase + '_stickonbg')                
-            self.stick_paths = sorted(make_grouped_dataset(self.dir_stick))
-            check_path_valid(self.stick_paths, self.img_paths)
         # No longer load pre-rendered stick images
+        # if self.opt.pose_input_format == 'stick_on_bg':
+        #     self.dir_stick = os.path.join(opt.dataroot, opt.phase + '_stickonbg')                
+        #     self.stick_paths = sorted(make_grouped_dataset(self.dir_stick))
+        #     check_path_valid(self.stick_paths, self.img_paths)
         # elif self.opt.pose_input_format == 'stick_with_bg':
         #     self.dir_stick = os.path.join(opt.dataroot, opt.phase + '_stickonblack')                
         #     self.stick_paths = sorted(make_grouped_dataset(self.dir_stick))
         #     check_path_valid(self.stick_paths, self.img_paths)
         #     self.bg_paths = sorted(make_grouped_dataset(self.dir_bg))
         #     check_path_valid(self.bg_paths, self.img_paths)
-        elif self.opt.pose_input_format == 'stick_with_bg':
+        if self.opt.pose_input_format in ['stick_on_bg', 'stick_with_bg', 'heatmap_with_bg']:
             self.kp_paths = sorted(make_grouped_dataset(self.dir_kp))
             check_path_valid(self.kp_paths, self.img_paths)
             self.bg_paths = sorted(make_grouped_dataset(self.dir_bg))
             check_path_valid(self.bg_paths, self.img_paths)
-        elif self.opt.pose_input_format == 'heatmap_with_bg':
-            self.kp_paths = sorted(make_grouped_dataset(self.dir_kp))
-            check_path_valid(self.kp_paths, self.img_paths)
-            self.bg_paths = sorted(make_grouped_dataset(self.dir_bg))
-            check_path_valid(self.bg_paths, self.img_paths)
-
+        else:
+            raise Exception("Pose input format not supported {}".format(self.opt.pose_input_format))
         self.init_frame_idx(self.img_paths)
 
     def __getitem__(self, index):
@@ -59,19 +55,23 @@ class Vid2playerDataset(BaseDataset):
 
         frame_range = list(range(n_frames_total)) if (self.opt.isTrain or self.A is None) else [self.opt.n_frames_G-1]
         for i in frame_range:
-            if self.opt.pose_input_format == 'stick_on_bg':
-                stick_path = self.stick_paths[seq_idx][start_idx + i * t_step]
-                Ai = self.get_image(stick_path, size, params, input_type='img')
             # No longer load pre-rendered stick images
+            # if self.opt.pose_input_format == 'stick_on_bg':
+            #     stick_path = self.stick_paths[seq_idx][start_idx + i * t_step]
+            #     Ai = self.get_image(stick_path, size, params, input_type='img')
             # elif self.opt.pose_input_format == 'stick_with_bg':
             #     stick_path = self.stick_paths[seq_idx][start_idx + i * t_step]
             #     Si = self.get_image(stick_path, size, params, input_type='img')
             #     bg_path = self.bg_paths[seq_idx][start_idx + i * t_step]
             #     Bi = self.get_image(bg_path, size, params, input_type='img')
             #     Ai = torch.cat([Bi, Si])
+            if self.opt.pose_input_format == 'stick_on_bg':
+                kp_path = self.kp_paths[seq_idx][start_idx + i * t_step]
+                bg_path = self.bg_paths[seq_idx][start_idx + i * t_step]
+                Ai = self.get_image(kp_path, size, params, input_type='stick_on_bg', bg_path=bg_path)
             elif self.opt.pose_input_format == 'stick_with_bg':
                 kp_path = self.kp_paths[seq_idx][start_idx + i * t_step]
-                Si = self.get_image(kp_path, size, params, input_type='stick')
+                Si = self.get_image(kp_path, size, params, input_type='stick_on_black')
                 bg_path = self.bg_paths[seq_idx][start_idx + i * t_step]
                 Bi = self.get_image(bg_path, size, params, input_type='img')
                 Ai = torch.cat([Bi, Si])
@@ -98,14 +98,14 @@ class Vid2playerDataset(BaseDataset):
 
         return return_list
 
-    def get_image(self, A_path, size, params, input_type):
+    def get_image(self, A_path, size, params, input_type, bg_path=None):
         if input_type == 'heatmap':
             A_img = make_joint_heatmaps(size[0], size[1], np.array(json.load(open(A_path, 'r'))))
             if 'crop' in self.opt.resize_or_crop:
                 A_img = A_img[params['crop_pos'][0] : params['crop_pos'][0] + params['crop_size'][0],
                               params['crop_pos'][1] : params['crop_pos'][1] + params['crop_size'][1]]
             return torch.from_numpy(A_img.transpose(2, 0, 1)).float()
-        elif input_type == 'stick':
+        elif input_type in ['stick_on_black', 'stick_on_bg']:
             kps = np.array(json.load(open(A_path, 'r')))
             if self.opt.add_input_noise != 'none':
                 if self.opt.add_input_noise == 'sigma5,cap10':
@@ -115,8 +115,11 @@ class Vid2playerDataset(BaseDataset):
                 else:
                     raise Exception("Not support option: add_input_noise="+self.opt.add_input_noise)
                 kps = kps + kps_noise
-                
-            A_img_np = make_stick_figures(size[0], size[1], kps, 
+
+            background = None
+            if input_type == 'stick_on_bg':
+                background = cv2.imread(bg_path)
+            A_img_np = make_stick_figures(size[0], size[1], kps, background=background,
                 draw_feet=True if 'feet' in self.opt.pose_input else False,
                 draw_racket=True if 'racket' in self.opt.pose_input else False)
             A_img = Image.fromarray(A_img_np[:, :, ::-1])
