@@ -206,10 +206,11 @@ def eval(model, dataset, visualizer, total_steps):
         fake_B = generated[0][0].detach() # 3 x h x w   
 
         ### add color shift
-        diff = real_B - fake_B
-        diff_crop = torch.cat((diff[:, :50], diff[:, -50:]), dim=1)
-        diff_avg = torch.mean(diff_crop.view(-1, 3), dim=0).unsqueeze(1).unsqueeze(1)
-        fake_B = fake_B + diff_avg
+        if 'wimbledon' in opt.name:
+            diff = real_B - fake_B
+            diff_crop = torch.cat((diff[:, :50], diff[:, -50:]), dim=1)
+            diff_avg = torch.mean(diff_crop.view(-1, 3), dim=0).unsqueeze(1).unsqueeze(1)
+            fake_B = fake_B + diff_avg
 
         if start_of_seq == 0:
             recon_loss = ReconLoss(real_B, fake_B)
