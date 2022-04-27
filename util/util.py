@@ -257,7 +257,7 @@ def make_joint_heatmaps(img_width, img_height, kps, sigma=7/4.0, method='edt'):
     return canvas
 
 
-def make_stick_figures(img_width, img_height, kps, background=None, draw_feet=False, draw_racket=False):
+def make_stick_figures(img_width, img_height, kps, thick=True, background=None, draw_feet=False, draw_racket=False):
     class Pose:
         """
         DCPose Body 17
@@ -288,8 +288,12 @@ def make_stick_figures(img_width, img_height, kps, background=None, draw_feet=Fa
 
 
     shift = np.array([0, 0])
-    line_thick = 4
-    dot_radius = 4
+    if thick:
+        line_thick = 4
+        dot_radius = 4
+    else:
+        line_thick = 2
+        dot_radius = 2
 
     kp_lines = [
         [Pose.RShoulder, Pose.RElbow],

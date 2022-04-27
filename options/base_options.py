@@ -82,6 +82,7 @@ class BaseOptions():
         self.parser.add_argument('--add_input_noise', type=str, default='none', help='how much noise added to input')
         self.parser.add_argument('--use_relight', action='store_true', help='use relighted images as B')
         self.parser.add_argument('--eval_freq', type=int, default=0, help='frequency for running eval')
+        self.parser.add_argument('--foreground', action='store_true', help='foreground player')
 
         # miscellaneous                
         self.parser.add_argument('--load_pretrain', type=str, default='', help='if specified, load the pretrained model')                

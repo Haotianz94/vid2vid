@@ -52,6 +52,7 @@ class Vid2playerDataset(BaseDataset):
         img = Image.open(img_paths[start_idx]).convert('RGB')     
         size = img.size
         params = get_img_params(self.opt, size)
+        params['fg'] = self.opt.foreground
 
         frame_range = list(range(n_frames_total)) if (self.opt.isTrain or self.A is None) else [self.opt.n_frames_G-1]
         for i in frame_range:
@@ -68,7 +69,8 @@ class Vid2playerDataset(BaseDataset):
             if self.opt.pose_input_format == 'stick_on_bg':
                 kp_path = self.kp_paths[seq_idx][start_idx + i * t_step]
                 bg_path = self.bg_paths[seq_idx][start_idx + i * t_step]
-                Ai = self.get_image(kp_path, size, params, input_type='stick_on_bg', bg_path=bg_path)
+                params['bg_path'] = bg_path
+                Ai = self.get_image(kp_path, size, params, input_type='stick_on_bg')
             elif self.opt.pose_input_format == 'stick_with_bg':
                 kp_path = self.kp_paths[seq_idx][start_idx + i * t_step]
                 Si = self.get_image(kp_path, size, params, input_type='stick_on_black')
@@ -119,7 +121,7 @@ class Vid2playerDataset(BaseDataset):
             background = None
             if input_type == 'stick_on_bg':
                 background = cv2.imread(bg_path)
-            A_img_np = make_stick_figures(size[0], size[1], kps, background=background,
+            A_img_np = make_stick_figures(size[0], size[1], kps, background=background, thick=params['fg'],
                 draw_feet=True if 'feet' in self.opt.pose_input else False,
                 draw_racket=True if 'racket' in self.opt.pose_input else False)
             A_img = Image.fromarray(A_img_np[:, :, ::-1])
