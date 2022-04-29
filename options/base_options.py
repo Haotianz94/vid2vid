@@ -83,6 +83,8 @@ class BaseOptions():
         self.parser.add_argument('--use_relight', action='store_true', help='use relighted images as B')
         self.parser.add_argument('--eval_freq', type=int, default=0, help='frequency for running eval')
         self.parser.add_argument('--foreground', action='store_true', help='foreground player')
+        self.parser.add_argument('--add_recon_bg_loss', action='store_true', help='add reconstruction loss on background region')
+        self.parser.add_argument('--lambda_recon_bg', type=float, default=10.0, help='weight for background reconstruction loss')        
 
         # miscellaneous                
         self.parser.add_argument('--load_pretrain', type=str, default='', help='if specified, load the pretrained model')                

@@ -42,20 +42,29 @@ class Vid2playerDataset(BaseDataset):
             check_path_valid(self.bg_paths, self.img_paths)
         else:
             raise Exception("Pose input format not supported {}".format(self.opt.pose_input_format))
+        if opt.phase == 'train' and opt.add_recon_bg_loss:
+            self.dir_mask = os.path.join(opt.dataroot, opt.phase + '_mask')
+            self.mask_paths = sorted(make_grouped_dataset(self.dir_mask))
+            check_path_valid(self.mask_paths, self.img_paths)
         self.init_frame_idx(self.img_paths)
 
     def __getitem__(self, index):
+        opt = self.opt
         A, B, _, seq_idx = self.update_frame_idx(self.img_paths, index)
+        M = None
         img_paths = self.img_paths[seq_idx]        
         n_frames_total, start_idx, t_step = get_video_params(self.opt, self.n_frames_total, len(img_paths), self.frame_idx)
         
         img = Image.open(img_paths[start_idx]).convert('RGB')     
         size = img.size
         params = get_img_params(self.opt, size)
-        params['fg'] = self.opt.foreground
+        params['thick'] = self.opt.foreground == True
 
         frame_range = list(range(n_frames_total)) if (self.opt.isTrain or self.A is None) else [self.opt.n_frames_G-1]
         for i in frame_range:
+            # from sequence of seq_idx, sample n_frames_total frames start at start_idx with stride of t_step
+            # this sampled seq serve as one item in the batch
+
             # No longer load pre-rendered stick images
             # if self.opt.pose_input_format == 'stick_on_bg':
             #     stick_path = self.stick_paths[seq_idx][start_idx + i * t_step]
@@ -66,18 +75,18 @@ class Vid2playerDataset(BaseDataset):
             #     bg_path = self.bg_paths[seq_idx][start_idx + i * t_step]
             #     Bi = self.get_image(bg_path, size, params, input_type='img')
             #     Ai = torch.cat([Bi, Si])
-            if self.opt.pose_input_format == 'stick_on_bg':
+            if opt.pose_input_format == 'stick_on_bg':
                 kp_path = self.kp_paths[seq_idx][start_idx + i * t_step]
                 bg_path = self.bg_paths[seq_idx][start_idx + i * t_step]
                 params['bg_path'] = bg_path
                 Ai = self.get_image(kp_path, size, params, input_type='stick_on_bg')
-            elif self.opt.pose_input_format == 'stick_with_bg':
+            elif opt.pose_input_format == 'stick_with_bg':
                 kp_path = self.kp_paths[seq_idx][start_idx + i * t_step]
                 Si = self.get_image(kp_path, size, params, input_type='stick_on_black')
                 bg_path = self.bg_paths[seq_idx][start_idx + i * t_step]
                 Bi = self.get_image(bg_path, size, params, input_type='img')
                 Ai = torch.cat([Bi, Si])
-            elif self.opt.pose_input_format == 'heatmap_with_bg':
+            elif opt.pose_input_format == 'heatmap_with_bg':
                 bg_path = self.bg_paths[seq_idx][start_idx + i * t_step]
                 Bi = self.get_image(bg_path, size, params, input_type='img')
                 kp_path = self.kp_paths[seq_idx][start_idx + i * t_step]
@@ -91,12 +100,16 @@ class Vid2playerDataset(BaseDataset):
 
             A = concat_frame(A, Ai, n_frames_total)
             B = concat_frame(B, Bi, n_frames_total)
+            if opt.phase == 'train' and opt.add_recon_bg_loss:
+                mask_path = self.mask_paths[seq_idx][start_idx + i * t_step]
+                Mi = self.get_image(mask_path, size, params, input_type='mask')
+                M = concat_frame(M, Mi, n_frames_total)
         
         if not self.opt.isTrain:
             self.A, self.B = A, B
             self.frame_idx += 1            
         change_seq = False if self.opt.isTrain else self.change_seq
-        return_list = {'A': A, 'B': B, 'inst': 0, 'A_path': img_path, 'change_seq': change_seq}
+        return_list = {'A': A, 'B': B, 'inst': 0, 'mask': M if M is not None else 0, 'A_path': img_path, 'change_seq': change_seq}
 
         return return_list
 
@@ -121,10 +134,17 @@ class Vid2playerDataset(BaseDataset):
             background = None
             if input_type == 'stick_on_bg':
                 background = cv2.imread(bg_path)
-            A_img_np = make_stick_figures(size[0], size[1], kps, background=background, thick=params['fg'],
+            A_img_np = make_stick_figures(size[0], size[1], kps, background=background, thick=params['thick'],
                 draw_feet=True if 'feet' in self.opt.pose_input else False,
                 draw_racket=True if 'racket' in self.opt.pose_input else False)
             A_img = Image.fromarray(A_img_np[:, :, ::-1])
+        elif input_type == 'mask':
+            A_img = Image.open(A_path).convert('L')
+            A_img = np.array(A_img) == 0 # store mask where bg in 1 and fg in 0
+            if 'crop' in self.opt.resize_or_crop:
+                A_img = A_img[params['crop_pos'][0] : params['crop_pos'][0] + params['crop_size'][0],
+                              params['crop_pos'][1] : params['crop_pos'][1] + params['crop_size'][1]]
+            return torch.from_numpy(A_img).unsqueeze(0).float()
         else:
             A_img = Image.open(A_path).convert('RGB')
 

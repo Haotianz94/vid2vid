@@ -69,7 +69,7 @@ def train():
             fake_B_prev_last, frames_all = data_loader_train.dataset.init_data(t_scales)
 
             for i in range(0, n_frames_total, n_frames_load):
-                input_A, input_B, inst_A = data_loader_train.dataset.prepare_data(data, i, input_nc, output_nc)
+                input_A, input_B, inst_A, mask = data_loader_train.dataset.prepare_data(data, i, input_nc, output_nc)
                 
                 ###################################### Forward Pass ##########################
                 ####### generator
@@ -80,7 +80,7 @@ def train():
                     fake_B, fake_B_raw, flow, weight, real_A, real_Bp, fake_B_last = modelG(input_A, input_B, inst_A, fake_B_prev_last)
 
                 ####### discriminator            
-                ### individual frame discriminator          
+                ### individual frame discriminator
                 real_B_prev, real_B = real_Bp[:, :-1], real_Bp[:, 1:]   # the collection of previous and current real frames
                 
                 if opt.use_amp:
@@ -94,9 +94,9 @@ def train():
                 
                 if opt.use_amp:
                     with torch.cuda.amp.autocast():                
-                        losses = modelD(0, reshape([real_B, fake_B, fake_B_raw, real_A, real_B_prev, fake_B_prev, flow, weight, flow_ref, conf_ref]))
+                        losses = modelD(0, reshape([real_B, fake_B, fake_B_raw, real_A, real_B_prev, fake_B_prev, flow, weight, flow_ref, conf_ref, mask]))
                 else:
-                    losses = modelD(0, reshape([real_B, fake_B, fake_B_raw, real_A, real_B_prev, fake_B_prev, flow, weight, flow_ref, conf_ref]))
+                    losses = modelD(0, reshape([real_B, fake_B, fake_B_raw, real_A, real_B_prev, fake_B_prev, flow, weight, flow_ref, conf_ref, mask]))
                 losses = [ torch.mean(x) if x is not None else 0 for x in losses ]
                 loss_dict = dict(zip(modelD.module.loss_names, losses))
 
