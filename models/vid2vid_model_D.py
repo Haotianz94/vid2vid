@@ -137,11 +137,14 @@ class Vid2VidModelD(BaseModel):
         if self.opt.add_recon_bg_loss:
             if self.opt.debug:
                 print("DEBUG recon loss")
-                print('fake_B size', fake_B.size())
+                print('real_A size', real_A.size())
                 print('real_B size', real_B.size())
                 print('mask size', mask.size())
-            mask = mask[-fake_B.size(0):]
-            loss_G_ReconBG = self.criterionReconBG(fake_B, real_B.detach(), mask.detach()) * self.opt.lambda_recon_bg
+            # mask = mask[-fake_B.size(0):]
+            assert self.opt.pose_input_format in ['stick_on_bg', 'stick_with_bg']
+            bg = real_A[:, :3]
+            mask = mask[-bg.size(0):]
+            loss_G_ReconBG = self.criterionReconBG(fake_B, bg, mask.detach()) * self.opt.lambda_recon_bg
         else:
             loss_G_ReconBG = torch.zeros_like(loss_W)       
         ### VGG + GAN loss 
