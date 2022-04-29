@@ -140,7 +140,7 @@ class Vid2playerDataset(BaseDataset):
             A_img = Image.fromarray(A_img_np[:, :, ::-1])
         elif input_type == 'mask':
             A_img = Image.open(A_path).convert('L')
-            A_img = np.array(A_img) == 0 # store mask where bg in 1 and fg in 0
+            A_img = np.array(A_img) < 127 # store mask where bg in 1 and fg in 0
             if 'crop' in self.opt.resize_or_crop:
                 A_img = A_img[params['crop_pos'][0] : params['crop_pos'][0] + params['crop_size'][0],
                               params['crop_pos'][1] : params['crop_pos'][1] + params['crop_size'][1]]
