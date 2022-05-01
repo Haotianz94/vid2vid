@@ -129,8 +129,8 @@ class Vid2VidModelD(BaseModel):
             fake_B_prev = fake_B_prev[:, :3]
             real_mask = real_mask[-fake_B.size(0):]
             # Composite output foreground with background
-            fake_B = fake_B * fake_mask + real_B * (1 - fake_mask)
-            fake_B_raw = fake_B_raw * fake_mask + real_B * (1 - fake_mask)
+            # fake_B = fake_B * fake_mask + real_B * (1 - fake_mask)
+            # fake_B_raw = fake_B_raw * fake_mask + real_B * (1 - fake_mask)
 
         ################### Flow loss #################
         if flow is not None:

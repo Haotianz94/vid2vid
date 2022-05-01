@@ -207,17 +207,18 @@ def eval(model, dataset, visualizer, total_steps):
         real_A = As[0][-1].detach().to(device) # 3 x h x w
         real_B = Bs[0][-1].detach().to(device) # 3 x h x w
         if opt.generate_mask:
-            fake_B, fake_mask = fake_B[0][:3].detach(), fake_B[0][3:].detach() # 3 x h x w, 1 x h x w
-            fake_B = fake_B * fake_mask + real_A[:3] * (1 - fake_mask)
+            fake_B_raw, fake_mask = fake_B[0][:3].detach(), fake_B[0][3:].detach() # 3 x h x w, 1 x h x w
+            fake_B = fake_B_raw * fake_mask + real_A[:3] * (1 - fake_mask)
         else:
             fake_B = fake_B[0].detach() # 3 x h x w   
 
         ### add color shift
-        sample_width = 50 if opt.foreground else 20
-        diff = real_B - fake_B
-        diff_crop = torch.cat((diff[:, :sample_width], diff[:, -sample_width:]), dim=1)
-        diff_avg = torch.mean(diff_crop.view(-1, 3), dim=0).unsqueeze(1).unsqueeze(1)
-        fake_B = fake_B + diff_avg
+        if not opt.generate_mask:
+            sample_width = 50 if opt.foreground else 20
+            diff = real_B - fake_B
+            diff_crop = torch.cat((diff[:, :sample_width], diff[:, -sample_width:]), dim=1)
+            diff_avg = torch.mean(diff_crop.view(-1, 3), dim=0).unsqueeze(1).unsqueeze(1)
+            fake_B = fake_B + diff_avg
 
         if start_of_seq == 0:
             recon_loss = ReconLoss(real_B, fake_B)
@@ -233,9 +234,10 @@ def eval(model, dataset, visualizer, total_steps):
         real_B = cv2.cvtColor(util.tensor2im(real_B), cv2.COLOR_RGB2BGR)
         fake_B = cv2.cvtColor(util.tensor2im(fake_B), cv2.COLOR_RGB2BGR)
         if opt.generate_mask:
+            fake_B_raw = cv2.cvtColor(util.tensor2im(fake_B_raw), cv2.COLOR_RGB2BGR)
             fake_mask = util.tensor2im(fake_mask, normalize=False)
             fake_mask = np.concatenate((fake_mask, fake_mask, fake_mask), axis=2)
-            frames.append(util.plot_image_grid([real_A, real_B, fake_B, fake_mask], nrow=4))
+            frames.append(util.plot_image_grid([real_A, real_B, fake_B_raw, fake_B, fake_mask], nrow=5))
         else:
             frames.append(util.plot_image_grid([real_A, real_B, fake_B], nrow=3))
 
