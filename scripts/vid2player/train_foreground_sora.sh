@@ -4,7 +4,6 @@ python train.py --name djokovic_fg_usopen_sora \
 --pose_input_format 'stick_with_bg' --pose_input 'body,feet,racket' \
 --input_nc 6 --num_D 2 \
 --resize_or_crop none \
---generate_mask --output_nc 4 --lambda_recon_mask 100 \
 --add_recon_bg_loss --lambda_recon_bg 100 \
 --gpu_ids 0 --batchSize 1 --max_frames_per_gpu 5 \
 --niter 5 --niter_decay 5 \

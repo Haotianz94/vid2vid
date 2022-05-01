@@ -58,7 +58,7 @@ class Vid2playerDataset(BaseDataset):
         img = Image.open(img_paths[start_idx]).convert('RGB')     
         size = img.size
         params = get_img_params(self.opt, size)
-        params['thick'] = self.opt.foreground == True
+        params['thick'] = self.opt.is_fg == True
 
         frame_range = list(range(n_frames_total)) if (self.opt.isTrain or self.A is None) else [self.opt.n_frames_G-1]
         for i in frame_range:
