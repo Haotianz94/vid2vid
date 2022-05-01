@@ -131,8 +131,16 @@ class Vid2VidModelG(BaseModel):
 
         start_gpu = self.gpu_ids[1] if self.split_gpus else real_A_all.get_device()        
         fake_B, fake_B_raw, flow, weight = self.generate_frame_train(netG, real_A_all, fake_B_prev, start_gpu, is_first_frame)        
-        fake_B_prev = [B[:, -tG+1:].detach() for B in fake_B] # bs x (tG-1) x 3 x h x w 
-        fake_B = [B[:, tG-1:] for B in fake_B] # bs x 1 x 3 x h x w
+        fake_B_prev = [B[:, -tG+1:].detach() for B in fake_B] # bs x (tG-1) x output_nc x h x w 
+        fake_B = [B[:, tG-1:] for B in fake_B] # bs x 1 x output_nc x h x w
+        if self.opt.debug:
+            print("input_A size", input_A.size()) # bs x (tG-1+N) x input_nc x h x w 
+            print("input_B size", input_B.size()) # bs x (tG-1+N) x 3 x h x w
+            print('fake_B size', fake_B[0].size()) # bs x N x output_nc x h x w
+            print('fake_B_prev size', fake_B_prev[0].size()) # bs x (tG-1) x output_nc x h x w, end of sequence, used for next batch
+            print('fake_B_raw size', fake_B_raw.size()) # bs x (tG-1+N) x output_nc x h x w
+            print('real_A size', real_A_all[:,tG-1:].size()) # bs x N x input_nc x h x w,
+            print('real_Bp size', real_B_all[:,tG-2:].size()) # bs x (N+1) x 3 x h x w,
 
         return fake_B[0], fake_B_raw, flow, weight, real_A_all[:,tG-1:], real_B_all[:,tG-2:], fake_B_prev
 
@@ -145,7 +153,7 @@ class Vid2VidModelG(BaseModel):
 
         ### generate inputs   
         real_A_pyr = self.build_pyr(real_A_all)        
-        fake_Bs_raw, flows, weights = None, None, None            
+        fake_Bs_raw, flows, weights = None, None, None
         
         ### sequentially generate each frame
         for t in range(n_frames_load):
@@ -167,7 +175,7 @@ class Vid2VidModelG(BaseModel):
                 if (t % self.n_frames_bp) == 0:
                     fake_B_prevs = fake_B_prevs.detach()
                 fake_B_prevs_reshaped = fake_B_prevs.view(self.bs, -1, h, w)
-                
+
                 # 3. mask for foreground and whether to use warped previous image
                 mask_F = self.compute_mask(real_As, t+tG-1) if self.opt.fg else None
                 use_raw_only = self.opt.no_first_img and is_first_frame 
@@ -330,7 +338,14 @@ class Vid2VidModelG(BaseModel):
         return mask_F    
 
     def compute_fake_B_prev(self, real_B_prev, fake_B_last, fake_B):
-        fake_B_prev = real_B_prev[:, 0:1] if fake_B_last is None else fake_B_last[0][:, -1:]
+        if self.opt.generate_mask:
+            if fake_B_last is None:
+                fake_B_prev = real_B_prev[:, 0:1] 
+                fake_B_prev = torch.cat((fake_B_prev, fake_B_prev[:, :, 0:1]), dim=2) 
+            else: 
+                fake_B_prev = fake_B_last[0][:, -1:]
+        else:
+            fake_B_prev = real_B_prev[:, 0:1] if fake_B_last is None else fake_B_last[0][:, -1:]
         if fake_B.size()[1] > 1:
             fake_B_prev = torch.cat([fake_B_prev, fake_B[:, :-1].detach()], dim=1)
         return fake_B_prev

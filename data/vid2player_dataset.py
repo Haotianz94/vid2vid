@@ -42,7 +42,7 @@ class Vid2playerDataset(BaseDataset):
             check_path_valid(self.bg_paths, self.img_paths)
         else:
             raise Exception("Pose input format not supported {}".format(self.opt.pose_input_format))
-        if opt.phase == 'train' and opt.add_recon_bg_loss:
+        if opt.phase == 'train' and (opt.add_recon_bg_loss or opt.generate_mask):
             self.dir_mask = os.path.join(opt.dataroot, opt.phase + '_mask')
             self.mask_paths = sorted(make_grouped_dataset(self.dir_mask))
             check_path_valid(self.mask_paths, self.img_paths)
@@ -100,7 +100,7 @@ class Vid2playerDataset(BaseDataset):
 
             A = concat_frame(A, Ai, n_frames_total)
             B = concat_frame(B, Bi, n_frames_total)
-            if opt.phase == 'train' and opt.add_recon_bg_loss:
+            if opt.phase == 'train' and (opt.add_recon_bg_loss or opt.generate_mask):
                 mask_path = self.mask_paths[seq_idx][start_idx + i * t_step]
                 Mi = self.get_image(mask_path, size, params, input_type='mask')
                 M = concat_frame(M, Mi, n_frames_total)
@@ -140,7 +140,7 @@ class Vid2playerDataset(BaseDataset):
             A_img = Image.fromarray(A_img_np[:, :, ::-1])
         elif input_type == 'mask':
             A_img = Image.open(A_path).convert('L')
-            A_img = np.array(A_img) < 127 # store mask where bg in 1 and fg in 0
+            A_img = np.array(A_img) > 127 # store mask where bg in 1 and fg in 0
             if 'crop' in self.opt.resize_or_crop:
                 A_img = A_img[params['crop_pos'][0] : params['crop_pos'][0] + params['crop_size'][0],
                               params['crop_pos'][1] : params['crop_pos'][1] + params['crop_size'][1]]

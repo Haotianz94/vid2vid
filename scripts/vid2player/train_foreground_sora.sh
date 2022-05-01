@@ -3,11 +3,11 @@ python train.py --name djokovic_fg_usopen_sora \
 --dataset_mode vid2player \
 --pose_input_format 'stick_with_bg' --pose_input 'body,feet,racket' \
 --input_nc 6 --num_D 2 \
---resize_or_crop crop --fineSize 64 \
---add_recon_bg_loss \
+--resize_or_crop none \
+--generate_mask --output_nc 4 \
 --gpu_ids 0 --batchSize 1 --max_frames_per_gpu 4 \
 --niter 5 --niter_decay 5 \
 --no_first_img --n_frames_total 12 --max_t_step 4 \
---print_freq 1 --display_freq 1 --save_latest_freq 3000 --eval_freq 3000 \
+--print_freq 1 --display_freq 1 --save_latest_freq 3000 --eval_freq 1 \
 --use_log --no_html \
---debug 
+--debug

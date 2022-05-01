@@ -23,14 +23,14 @@ class Vid2VidModelD(BaseModel):
         if not opt.debug:
             torch.backends.cudnn.benchmark = True    
         self.tD = opt.n_frames_D  
-        self.output_nc = opt.output_nc        
+        self.output_nc = 3        
 
         # define networks        
         # single image discriminator
         self.input_nc = opt.label_nc if opt.label_nc != 0 else opt.input_nc
         if opt.use_instance:
             self.input_nc += 1
-        netD_input_nc = self.input_nc + opt.output_nc
+        netD_input_nc = self.input_nc + self.output_nc
                
         self.netD = networks.define_D(netD_input_nc, opt.ndf, opt.n_layers_D, opt.norm,
                                       opt.num_D, not opt.no_ganFeat, gpu_ids=self.gpu_ids)
@@ -40,7 +40,7 @@ class Vid2VidModelD(BaseModel):
                                             max(1, opt.num_D - 2), not opt.no_ganFeat, gpu_ids=self.gpu_ids)
                     
         # temporal discriminator
-        netD_input_nc = opt.output_nc * opt.n_frames_D + 2 * (opt.n_frames_D-1)        
+        netD_input_nc = self.output_nc * opt.n_frames_D + 2 * (opt.n_frames_D-1)        
         for s in range(opt.n_scales_temporal):
             setattr(self, 'netD_T'+str(s), networks.define_D(netD_input_nc, opt.ndf, opt.n_layers_D, opt.norm,
                     opt.num_D, not opt.no_ganFeat, gpu_ids=self.gpu_ids))        
@@ -67,7 +67,7 @@ class Vid2VidModelD(BaseModel):
         if not opt.no_vgg:
             self.criterionVGG = networks.VGGLoss(self.gpu_ids[0])
 
-        self.loss_names = ['G_ReconBG', 'G_VGG', 'G_GAN', 'G_GAN_Feat',                            
+        self.loss_names = ['G_ReconBG', 'G_mask', 'G_VGG', 'G_GAN', 'G_GAN_Feat',                            
                            'D_real', 'D_fake',
                            'G_Warp', 'F_Flow', 'F_Warp', 'W']                
         self.loss_names_T = ['G_T_GAN', 'G_T_GAN_Feat', 'D_T_real', 'D_T_fake', 'G_T_Warp']     
@@ -105,6 +105,12 @@ class Vid2VidModelD(BaseModel):
         if scale_T > 0:
             real_B, fake_B, flow_ref, conf_ref = tensors_list
             _, _, _, self.height, self.width = real_B.size()
+            if self.opt.generate_mask:
+                # Separate output frame and mask
+                fake_B, fake_mask = fake_B[:, :, :3], fake_B[:, :, 3:] # (bsxN) x 3 x h x w
+                # Composite output foreground with background
+                fake_B = fake_B * fake_mask + real_B * (1 - fake_mask)
+
             loss_D_T_real, loss_D_T_fake, loss_G_T_GAN, loss_G_T_GAN_Feat = self.compute_loss_D_T(real_B, fake_B, 
                 flow_ref/20, conf_ref, scale_T-1)            
             loss_G_T_Warp = torch.zeros_like(loss_G_T_GAN)
@@ -113,18 +119,28 @@ class Vid2VidModelD(BaseModel):
             loss_list = [loss.view(-1, 1) for loss in loss_list]
             return loss_list            
 
-        real_B, fake_B, fake_B_raw, real_A, real_B_prev, fake_B_prev, flow, weight, flow_ref, conf_ref, mask = tensors_list
+        real_B, fake_B, fake_B_raw, real_A, real_B_prev, fake_B_prev, flow, weight, flow_ref, conf_ref, real_mask = tensors_list
         _, _, self.height, self.width = real_B.size()
+
+        if self.opt.generate_mask:
+            # Separate output frame and mask
+            fake_B, fake_mask = fake_B[:, :3], fake_B[:, 3:] # (bsxN) x 3 x h x w
+            fake_B_raw = fake_B_raw[:, :3]
+            fake_B_prev = fake_B_prev[:, :3]
+            real_mask = real_mask[-fake_B.size(0):]
+            # Composite output foreground with background
+            fake_B = fake_B * fake_mask + real_B * (1 - fake_mask)
+            fake_B_raw = fake_B_raw * fake_mask + real_B * (1 - fake_mask)
 
         ################### Flow loss #################
         if flow is not None:
-            # similar to flownet flow        
+            # Loss between generated flow and reference flow        
             loss_F_Flow = self.criterionFlow(flow, flow_ref, conf_ref) * lambda_F / (2 ** (scale_S-1))        
-            # warped prev image should be close to current image            
+            # Loss between warped prev real frames(with generated flow) and current real frames            
             real_B_warp = self.resample(real_B_prev, flow)                
             loss_F_Warp = self.criterionFlow(real_B_warp, real_B, conf_ref) * lambda_T
             
-            ################## weight loss ##################
+            # Loss for regularizing flow weight
             loss_W = torch.zeros_like(weight)
             if self.opt.no_first_img:
                 dummy0 = torch.zeros_like(weight)
@@ -139,14 +155,22 @@ class Vid2VidModelD(BaseModel):
                 print("DEBUG recon loss")
                 print('real_A size', real_A.size())
                 print('real_B size', real_B.size())
-                print('mask size', mask.size())
-            # mask = mask[-fake_B.size(0):]
+                print('mask size', real_mask.size())
             assert self.opt.pose_input_format in ['stick_on_bg', 'stick_with_bg']
             bg = real_A[:, :3]
-            mask = mask[-bg.size(0):]
-            loss_G_ReconBG = self.criterionReconBG(fake_B, bg, mask.detach()) * self.opt.lambda_recon_bg
+            real_mask = real_mask[-bg.size(0):]
+            loss_G_ReconBG = self.criterionReconBG(fake_B, bg, (1 - real_mask)) * self.opt.lambda_recon_bg
         else:
-            loss_G_ReconBG = torch.zeros_like(loss_W)       
+            loss_G_ReconBG = torch.zeros_like(loss_W)
+        ### Mask loss
+        if self.opt.generate_mask:
+            if self.opt.debug:
+                print("DEBUG mask loss")
+                print('fake_mask size', fake_mask.size())
+                print('real_mask size', real_mask.size())
+            loss_G_mask = self.criterionFeat(fake_mask, real_mask) * self.opt.lambda_recon_mask   
+        else:
+            loss_G_mask = torch.zeros_like(loss_W)
         ### VGG + GAN loss 
         loss_G_VGG = (self.criterionVGG(fake_B, real_B) * lambda_feat) if not self.opt.no_vgg else torch.zeros_like(loss_W)
         loss_D_real, loss_D_fake, loss_G_GAN, loss_G_GAN_Feat = self.compute_loss_D(self.netD, real_A, real_B, fake_B)
@@ -175,7 +199,7 @@ class Vid2VidModelD(BaseModel):
             else:
                 loss_D_f_real = loss_D_f_fake = loss_G_f_GAN = loss_G_f_GAN_Feat = torch.zeros_like(loss_D_real)
 
-        loss_list = [loss_G_ReconBG, loss_G_VGG, loss_G_GAN, loss_G_GAN_Feat,
+        loss_list = [loss_G_ReconBG, loss_G_mask, loss_G_VGG, loss_G_GAN, loss_G_GAN_Feat,
                      loss_D_real, loss_D_fake, 
                      loss_G_Warp, loss_F_Flow, loss_F_Warp, loss_W]
         if self.opt.add_face_disc:
@@ -268,7 +292,7 @@ class Vid2VidModelD(BaseModel):
 
     def get_losses(self, loss_dict, loss_dict_T, t_scales):
         loss_D = (loss_dict['D_fake'] + loss_dict['D_real']) * 0.5
-        loss_G = loss_dict['G_GAN'] + loss_dict['G_GAN_Feat'] + loss_dict['G_VGG'] + loss_dict['G_ReconBG']
+        loss_G = loss_dict['G_GAN'] + loss_dict['G_GAN_Feat'] + loss_dict['G_VGG'] + loss_dict['G_ReconBG'] + loss_dict['G_mask']
         loss_G += loss_dict['G_Warp'] + loss_dict['F_Flow'] + loss_dict['F_Warp'] + loss_dict['W']
         if self.opt.add_face_disc:
             loss_G += loss_dict['G_f_GAN'] + loss_dict['G_f_GAN_Feat'] 

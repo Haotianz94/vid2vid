@@ -123,6 +123,7 @@ class CompositeGenerator(BaseNetwork):
         self.n_downsampling = n_downsampling
         self.use_fg_model = use_fg_model
         self.no_flow = no_flow
+        self.output_nc = output_nc
         activation = nn.ReLU(True)
         
         if use_fg_model:
@@ -216,10 +217,10 @@ class CompositeGenerator(BaseNetwork):
         if use_raw_only or self.no_flow:
             img_final = img_raw
         else:
-            img_warp = self.resample(img_prev[:,-3:,...].cuda(gpu_id), flow).cuda(gpu_id)        
+            img_warp = self.resample(img_prev[:,-self.output_nc:,...].cuda(gpu_id), flow).cuda(gpu_id) 
             weight_ = weight.expand_as(img_raw)
             img_final = img_raw * weight_ + img_warp * (1-weight_)
-        
+
         img_fg_feat = None
         if self.use_fg_model:
             img_fg_feat = self.indv_up(self.indv_res(self.indv_down(input)))

@@ -70,8 +70,8 @@ def tensor2im(image_tensor, imtype=np.uint8, normalize=True):
         image_numpy = np.transpose(image_numpy, (1, 2, 0)) * 255.0
     #image_numpy = (np.transpose(image_numpy, (1, 2, 0)) * std + mean)  * 255.0        
     image_numpy = np.clip(image_numpy, 0, 255)
-    if image_numpy.shape[2] == 1:        
-        image_numpy = image_numpy[:,:,0]
+    # if image_numpy.shape[2] == 1:        
+    #     image_numpy = image_numpy[:,:,0]
     return image_numpy.astype(imtype)
 
 def tensor2label(output, n_label, imtype=np.uint8):

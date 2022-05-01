@@ -78,11 +78,6 @@ class BaseDataset(data.Dataset):
         input_B = (data['B'][:, i*output_nc:(i+t_len)*output_nc, ...]).view(-1, t_len, output_nc, height, width)                
         inst_A = (data['inst'][:, i:i+t_len, ...]).view(-1, t_len, 1, height, width) if len(data['inst'].size()) > 2 else None
         mask = (data['mask'][:, i:i+t_len, ...]).view(-1, t_len, 1, height, width) if len(data['mask'].size()) > 2 else None
-        if self.opt.debug:
-            print("input_A size", input_A.size())
-            print("input_B size", input_B.size())
-            if mask is not None:
-                print("mask", mask.size())
         return [input_A, input_B, inst_A, mask]
 
 def make_power_2(n, base=32.0):    

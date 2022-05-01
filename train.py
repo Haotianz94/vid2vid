@@ -7,6 +7,7 @@ from subprocess import call
 import copy
 from tqdm import tqdm
 import cv2
+import numpy as np
 
 from options.train_options import TrainOptions
 from data.data_loader import CreateDataLoader
@@ -69,7 +70,7 @@ def train():
             fake_B_prev_last, frames_all = data_loader_train.dataset.init_data(t_scales)
 
             for i in range(0, n_frames_total, n_frames_load):
-                input_A, input_B, inst_A, mask = data_loader_train.dataset.prepare_data(data, i, input_nc, output_nc)
+                input_A, input_B, inst_A, real_mask = data_loader_train.dataset.prepare_data(data, i, input_nc, output_nc=3)
                 
                 ###################################### Forward Pass ##########################
                 ####### generator
@@ -81,22 +82,23 @@ def train():
 
                 ####### discriminator            
                 ### individual frame discriminator
-                real_B_prev, real_B = real_Bp[:, :-1], real_Bp[:, 1:]   # the collection of previous and current real frames
+                real_B_prev, real_B = real_Bp[:, :-1], real_Bp[:, 1:] # the collection of previous and current real frames
                 
                 if opt.use_amp:
                     with torch.cuda.amp.autocast(): 
-                        flow_ref, conf_ref = flowNet(real_B, real_B_prev)       # reference flows and confidences 
+                        flow_ref, conf_ref = flowNet(real_B, real_B_prev) # reference flows and confidences 
                 else:
-                    flow_ref, conf_ref = flowNet(real_B, real_B_prev)       # reference flows and confidences 
+                    flow_ref, conf_ref = flowNet(real_B, real_B_prev)       
 
-                fake_B_prev = modelG.module.compute_fake_B_prev(real_B_prev, fake_B_prev_last, fake_B) # Haotian: need to figure out 
+                fake_B_prev = modelG.module.compute_fake_B_prev(real_B_prev, fake_B_prev_last, fake_B)
                 fake_B_prev_last = fake_B_last
+                # (fake_B_prev, fake_B) are used for computing fake flows, similar configuration as (real_B_prev, real_B) 
                 
                 if opt.use_amp:
                     with torch.cuda.amp.autocast():                
-                        losses = modelD(0, reshape([real_B, fake_B, fake_B_raw, real_A, real_B_prev, fake_B_prev, flow, weight, flow_ref, conf_ref, mask]))
+                        losses = modelD(0, reshape([real_B, fake_B, fake_B_raw, real_A, real_B_prev, fake_B_prev, flow, weight, flow_ref, conf_ref, real_mask]))
                 else:
-                    losses = modelD(0, reshape([real_B, fake_B, fake_B_raw, real_A, real_B_prev, fake_B_prev, flow, weight, flow_ref, conf_ref, mask]))
+                    losses = modelD(0, reshape([real_B, fake_B, fake_B_raw, real_A, real_B_prev, fake_B_prev, flow, weight, flow_ref, conf_ref, real_mask]))
                 losses = [ torch.mean(x) if x is not None else 0 for x in losses ]
                 loss_dict = dict(zip(modelD.module.loss_names, losses))
 
@@ -197,13 +199,18 @@ def eval(model, dataset, visualizer, total_steps):
 
         _, _, height, width = data['A'].size()
         As = data['A'].view(1, -1, opt.input_nc, height, width)
-        Bs = data['B'].view(1, -1, opt.output_nc, height, width) if len(data['B'].size()) > 2 else None
+        Bs = data['B'].view(1, -1, 3, height, width) if len(data['B'].size()) > 2 else None
         inst = data['inst'].view(1, -1, 1, height, width) if len(data['inst'].size()) > 2 else None
-        generated = model.inference(As, Bs, inst)
-        device = generated[0].get_device()
+        fake_B, _ = model.inference(As, Bs, inst)
+        device = fake_B.get_device()
 
-        real_B = Bs[0][-1].detach().to(device) # 3 x h x w    
-        fake_B = generated[0][0].detach() # 3 x h x w   
+        real_A = As[0][-1].detach().to(device) # 3 x h x w
+        real_B = Bs[0][-1].detach().to(device) # 3 x h x w
+        if opt.generate_mask:
+            fake_B, fake_mask = fake_B[0][:3].detach(), fake_B[0][3:].detach() # 3 x h x w, 1 x h x w
+            fake_B = fake_B * fake_mask + real_A[:3] * (1 - fake_mask)
+        else:
+            fake_B = fake_B[0].detach() # 3 x h x w   
 
         ### add color shift
         sample_width = 50 if opt.foreground else 20
@@ -225,7 +232,12 @@ def eval(model, dataset, visualizer, total_steps):
             real_A = cv2.cvtColor(util.tensor2im(As[0][-1][3:]), cv2.COLOR_RGB2BGR)
         real_B = cv2.cvtColor(util.tensor2im(real_B), cv2.COLOR_RGB2BGR)
         fake_B = cv2.cvtColor(util.tensor2im(fake_B), cv2.COLOR_RGB2BGR)
-        frames.append(util.plot_image_grid([real_A, real_B, fake_B], nrow=3))
+        if opt.generate_mask:
+            fake_mask = util.tensor2im(fake_mask, normalize=False)
+            fake_mask = np.concatenate((fake_mask, fake_mask, fake_mask), axis=2)
+            frames.append(util.plot_image_grid([real_A, real_B, fake_B, fake_mask], nrow=4))
+        else:
+            frames.append(util.plot_image_grid([real_A, real_B, fake_B], nrow=3))
 
     loss = loss_sum / frame_cnt
     update_best = False
