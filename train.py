@@ -214,7 +214,7 @@ def eval(model, dataset, visualizer, total_steps):
 
         ### add color shift
         if not opt.generate_mask:
-            sample_width = 50 if opt.foreground else 20
+            sample_width = 50 if opt.is_fg else 20
             diff = real_B - fake_B
             diff_crop = torch.cat((diff[:, :sample_width], diff[:, -sample_width:]), dim=1)
             diff_avg = torch.mean(diff_crop.view(-1, 3), dim=0).unsqueeze(1).unsqueeze(1)

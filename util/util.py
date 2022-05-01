@@ -340,6 +340,7 @@ def make_stick_figures(img_width, img_height, kps, thick=True, background=None, 
         [0, 127, 255],
         [127, 127, 127],
     ]
+    colors = [[0, 0, 255]] * len(colors)
 
     if background is None:
         kp_mask = np.zeros((img_height, img_width, 3), dtype=np.uint8)

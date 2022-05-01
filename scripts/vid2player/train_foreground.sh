@@ -1,6 +1,6 @@
 python train.py --name djokovic_fg_wimbledon \
 --dataroot 'datasets/vid2player/djokovic_fg_wimbledon' \
---dataset_mode vid2player --foreground \
+--dataset_mode vid2player --is_fg \
 --pose_input_format 'stick_with_bg' --pose_input 'body,feet,racket' \
 --input_nc 6 --num_D 2 \
 --resize_or_crop none \
