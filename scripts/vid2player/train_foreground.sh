@@ -1,9 +1,10 @@
 python train.py --name djokovic_fg_wimbledon \
 --dataroot 'datasets/vid2player/djokovic_fg_wimbledon' \
---dataset_mode vid2player --is_fg \
+--dataset_mode vid2player \
 --pose_input_format 'stick_with_bg' --pose_input 'body,feet,racket' \
---input_nc 6 --num_D 2 \
---resize_or_crop none \
+--input_nc 6 --num_D 2 --resize_or_crop none \
+--is_fg \
+--add_recon_bg_loss --lambda_recon_bg 1000 \
 --gpu_ids 0,1,2,3 --batchSize 15 --max_frames_per_gpu 3 \
 --niter 5 --niter_decay 5 \
 --no_first_img --n_frames_total 12 --max_t_step 4 \
