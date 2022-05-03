@@ -84,9 +84,11 @@ class BaseOptions():
         self.parser.add_argument('--eval_freq', type=int, default=0, help='frequency for running eval')
         self.parser.add_argument('--is_fg', action='store_true', help='is foreground player')
         self.parser.add_argument('--add_recon_bg_loss', action='store_true', help='add reconstruction loss on background region')
+        self.parser.add_argument('--add_recon_loss', action='store_true', help='add reconstruction loss on full frame')
         self.parser.add_argument('--generate_mask', action='store_true', help='Generator also predict mask')
         self.parser.add_argument('--lambda_recon_mask', type=float, default=10.0, help='weight for mask reconstruction loss')  
         self.parser.add_argument('--lambda_recon_bg', type=float, default=10.0, help='weight for background reconstruction loss')        
+        self.parser.add_argument('--lambda_recon', type=float, default=10.0, help='weight for reconstruction loss')  
 
         # miscellaneous                
         self.parser.add_argument('--load_pretrain', type=str, default='', help='if specified, load the pretrained model')                
