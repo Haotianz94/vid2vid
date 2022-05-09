@@ -1,0 +1,12 @@
+python train.py --name federer_fg_wimbledon_recon \
+--dataroot 'datasets/vid2player/federer_fg_wimbledon' \
+--dataset_mode vid2player \
+--pose_input_format 'stick_with_bg' --pose_input 'body,feet,racket' \
+--input_nc 6 --num_D 2 --resize_or_crop none \
+--is_fg --use_relight \
+--add_recon_bg_loss --lambda_recon_bg 1000 \
+--gpu_ids 0,1,2,3 --batchSize 15 --max_frames_per_gpu 3 \
+--niter 5 --niter_decay 5 \
+--no_first_img --n_frames_total 12 --max_t_step 4 \
+--print_freq 105 --display_freq 105 --save_latest_freq 1050 --eval_freq 3000 \
+--use_log --no_html \
