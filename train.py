@@ -173,15 +173,16 @@ def train():
                 break
            
         # end of epoch 
-        iter_end_time = time.time()
         visualizer.vis_print('End of epoch %d / %d \t Time Taken: %d sec' %
               (epoch, opt.niter + opt.niter_decay, time.time() - epoch_start_time))
 
         ### save model for this epoch and update model params
         save_models(opt, epoch, epoch_iter, total_steps, visualizer, iter_path, modelG, modelD, scaler, end_of_epoch=True)
-        update_models(opt, epoch, modelG, modelD, data_loader_train) 
+        update_models(opt, epoch, modelG, modelD, data_loader_train)
+        eval(modelG.module, dataset_val, visualizer, total_steps, end_of_epoch=epoch)
 
-def eval(model, dataset, visualizer, total_steps):
+
+def eval(model, dataset, visualizer, total_steps, end_of_epoch=None):
     opt = model.opt
     model.fake_B_prev = None
     model.opt.isTrain = False
@@ -240,6 +241,12 @@ def eval(model, dataset, visualizer, total_steps):
             frames.append(util.plot_image_grid([real_A, real_B, fake_B_raw, fake_B, fake_mask], nrow=5))
         else:
             frames.append(util.plot_image_grid([real_A, real_B, fake_B], nrow=3))
+    
+    if end_of_epoch is not None:
+        util.sequence_to_video(frames, os.path.join(opt.checkpoints_dir, opt.name, 'val_{}.mp4'.format(end_of_epoch)), fps=25)
+        model.fake_B_prev = None
+        model.opt.isTrain = True
+        return 
 
     loss = loss_sum / frame_cnt
     update_best = False
@@ -259,6 +266,7 @@ def eval(model, dataset, visualizer, total_steps):
     model.opt.isTrain = True
     return update_best
 
+
 def loss_backward(opt, loss, optimizer, scaler=None):
     optimizer.zero_grad()                
     # if opt.fp16:
@@ -274,12 +282,14 @@ def loss_backward(opt, loss, optimizer, scaler=None):
         loss.backward()
         optimizer.step()
 
+
 def reshape(tensors):
     if tensors is None: return None
     if isinstance(tensors, list):
         return [reshape(tensor) for tensor in tensors]    
     _, _, ch, h, w = tensors.size()
     return tensors.contiguous().view(-1, ch, h, w)
+
 
 if __name__ == "__main__":
    train()
