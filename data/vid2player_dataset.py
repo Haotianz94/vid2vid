@@ -62,7 +62,7 @@ class Vid2playerDataset(BaseDataset):
         img_paths = self.img_paths[seq_idx]        
         n_frames_total, start_idx, t_step = get_video_params(self.opt, self.n_frames_total, len(img_paths), self.frame_idx)
         augment_background = False
-        if opt.augment_background and np.random.rand() < opt.augment_ratio:
+        if opt.augment_background and opt.phase == 'train' and np.random.rand() < opt.augment_ratio:
             dx, dy = np.random.randint(-100, 100, 2)
             augment_background = True
         
