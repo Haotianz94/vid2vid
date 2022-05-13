@@ -8,7 +8,7 @@ python train.py --name djokovic_fg_wimbledon_augment \
 --augment_background --background wimbledon_background_extend.png --augment_ratio 0.75 \
 --load_pretrain checkpoints/djokovic_fg_wimbledon_recon \
 --gpu_ids 0,1,2,3 --batchSize 15 --max_frames_per_gpu 3 \
---niter 5 --niter_decay 5 \
+--niter 1 --niter_decay 1 \
 --no_first_img --n_frames_total 12 --max_t_step 4 \
 --print_freq 105 --display_freq 105 --save_latest_freq 1050 --eval_freq 3000 \
 --use_log --no_html \
