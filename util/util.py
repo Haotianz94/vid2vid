@@ -14,10 +14,12 @@ from collections import OrderedDict
 def save_all_tensors(opt, real_A, fake_B, fake_B_first, fake_B_raw, real_B, flow_ref, conf_ref, flow, weight, modelD):
     if opt.label_nc != 0:
         input_image = tensor2label(real_A, opt.label_nc)
-    elif opt.dataset_mode in ['pose', 'vid2player']:
+    elif opt.dataset_mode == 'pose':
         input_image = tensor2im(real_A)
+    elif opt.dataset_mode == 'vid2player':
         if opt.pose_input_format == 'stick_with_bg':
             input_image = tensor2im(real_A[:, :, 3:])
+            input_bg = tensor2im(real_A[:, :, :3])
         elif opt.pose_input_format == 'stick_on_bg':
             input_image = tensor2im(real_A[:, :])
         elif opt.pose_input_format == 'stick_with_heatmap':
@@ -41,6 +43,8 @@ def save_all_tensors(opt, real_A, fake_B, fake_B_first, fake_B_raw, real_B, flow
                    ('real_image', tensor2im(real_B)),                                                          
                    ('flow_ref', tensor2flow(flow_ref)),
                    ('conf_ref', tensor2im(conf_ref, normalize=False))]
+    if opt.pose_input_format == 'stick_with_bg':
+        visual_list += [('input_bg', input_bg)]
     if flow is not None:
         visual_list += [('flow', tensor2flow(flow)),
                         ('weight', tensor2im(weight, normalize=False))]
@@ -381,6 +385,39 @@ def make_stick_figures(img_width, img_height, kps, thick=True, background=None, 
                 kp_mask, p2,
                 radius=dot_radius, color=colors[l+2], thickness=-1, lineType=cv2.LINE_AA)
     return kp_mask
+
+
+def crop_image(img, bbox, self_pad=True):
+    # if bbox[0] < 0 or bbox[2] < 0 or bbox[1] >= img.shape[1] or bbox[3] >= img.shape[0]:
+    #     logging.warning("Crop bbox exceed image boundary!")
+    if not self_pad:
+        return img[bbox[1] : bbox[3], bbox[0] : bbox[2]]
+    else:
+        bbox_pad = bbox.copy()
+        shift_hori = (bbox[2] - bbox[0], 0)
+        shift_vert = (0, bbox[3] - bbox[1])
+        img_pad_src = img 
+        if bbox[0] < 0:
+            img_pad = np.roll(img_pad_src, shift_vert, axis=(1, 0))
+            img = np.concatenate((img_pad[:, :-bbox[0]], img), axis=1)
+            img_pad_src = np.concatenate((img_pad[:, :-bbox[0]], img_pad), axis=1)
+            bbox_pad[0] = 0
+            bbox_pad[2] += -bbox[0]
+        if bbox[1] < 0:
+            img_pad = np.roll(img_pad_src, shift_hori, axis=(1, 0))
+            img = np.concatenate((img_pad[:-bbox[1], :], img), axis=0)
+            img_pad_src = np.concatenate((img_pad[:-bbox[1], :], img_pad), axis=0)
+            bbox_pad[1] = 0
+            bbox_pad[3] += -bbox[1]
+        if bbox[2] > img.shape[1]:
+            img_pad = np.roll(img_pad_src, shift_vert, axis=(1, 0))
+            img = np.concatenate((img, img_pad[:, img.shape[1] - bbox[2]:], ), axis=1)
+            img_pad_src = np.concatenate((img_pad, img_pad[:, img_pad.shape[1] - bbox[2]:], ), axis=1)
+        if bbox[3] > img.shape[0]:
+            img_pad = np.roll(img_pad_src, shift_hori, axis=(1, 0))
+            img = np.concatenate((img, img_pad[img.shape[0] - bbox[3]:, :], ), axis=0)
+        return img[bbox_pad[1] : bbox_pad[3], bbox_pad[0] : bbox_pad[2]]
+
 
 ###############################################################################
 # Image visualization utils

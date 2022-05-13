@@ -8,7 +8,7 @@ import cv2
 from data.base_dataset import BaseDataset, get_img_params, get_transform, get_video_params, concat_frame
 from data.image_folder import make_grouped_dataset, check_path_valid
 from data.keypoint2img import read_keypoints
-from util.util import make_joint_heatmaps, make_stick_figures
+from util.util import make_joint_heatmaps, make_stick_figures, crop_image
 
 
 class Vid2playerDataset(BaseDataset):
@@ -42,10 +42,17 @@ class Vid2playerDataset(BaseDataset):
             check_path_valid(self.bg_paths, self.img_paths)
         else:
             raise Exception("Pose input format not supported {}".format(self.opt.pose_input_format))
-        if opt.phase == 'train' and (opt.add_recon_bg_loss or opt.generate_mask):
+        if opt.phase == 'train' and (opt.add_recon_bg_loss or opt.generate_mask or opt.augment_background):
             self.dir_mask = os.path.join(opt.dataroot, opt.phase + '_mask')
             self.mask_paths = sorted(make_grouped_dataset(self.dir_mask))
             check_path_valid(self.mask_paths, self.img_paths)
+        if opt.phase == 'train' and opt.augment_background:
+            self.dir_crop = os.path.join(opt.dataroot, opt.phase + '_crop')
+            self.crop_paths = sorted(make_grouped_dataset(self.dir_crop))
+            check_path_valid(self.crop_paths, self.img_paths)
+            self.background = np.array(Image.open(
+                os.path.join(opt.dataroot, opt.background_path)).convert('RGB'))
+            assert self.background is not None
         self.init_frame_idx(self.img_paths)
 
     def __getitem__(self, index):
@@ -54,6 +61,10 @@ class Vid2playerDataset(BaseDataset):
         M = None
         img_paths = self.img_paths[seq_idx]        
         n_frames_total, start_idx, t_step = get_video_params(self.opt, self.n_frames_total, len(img_paths), self.frame_idx)
+        augment_background = False
+        if opt.augment_background and np.random.rand() < opt.augment_ratio:
+            dx, dy = np.random.randint(-100, 100, 2)
+            augment_background = True
         
         img = Image.open(img_paths[start_idx]).convert('RGB')     
         size = img.size
@@ -84,17 +95,29 @@ class Vid2playerDataset(BaseDataset):
                 kp_path = self.kp_paths[seq_idx][start_idx + i * t_step]
                 Si = self.get_image(kp_path, size, params, input_type='stick_on_black')
                 bg_path = self.bg_paths[seq_idx][start_idx + i * t_step]
-                Bi = self.get_image(bg_path, size, params, input_type='img')
-                Ai = torch.cat([Bi, Si])
+                Gi = self.get_image(bg_path, size, params, input_type='img')
+                Ai = torch.cat([Gi, Si])
             elif opt.pose_input_format == 'heatmap_with_bg':
                 bg_path = self.bg_paths[seq_idx][start_idx + i * t_step]
-                Bi = self.get_image(bg_path, size, params, input_type='img')
+                Gi = self.get_image(bg_path, size, params, input_type='img')
                 kp_path = self.kp_paths[seq_idx][start_idx + i * t_step]
                 Hi = self.get_image(kp_path, size, params, input_type='heatmap')
-                Ai = torch.cat([Hi, Bi])
+                Ai = torch.cat([Hi, Gi])
 
             img_path = img_paths[start_idx + i * t_step]
             Bi = self.get_image(img_path, size, params, input_type='img')
+            if augment_background:
+                mask_path = self.mask_paths[seq_idx][start_idx + i * t_step]
+                Mi = self.get_image(mask_path, size, params, input_type='mask') # binary
+                crop_path = self.crop_paths[seq_idx][start_idx + i * t_step]
+                x, y = json.load(open(crop_path, 'r'))
+                if opt.background_path.startswith('wimbledon'): y -= 100
+                crop_box = [x + dx, y + dy, x + dx + size[0], y + dy + size[1]]
+                bg_crop = crop_image(self.background, crop_box) # in RGB 
+                transform = get_transform(opt, params)
+                Gi = transform(Image.fromarray(bg_crop))
+                Ai = torch.cat([Gi, Si])
+                Bi = Gi * (1 - Mi) + Bi * Mi
             
             # Ai, Bi = self.crop(Ai), self.crop(Bi) # only crop the central half region to save time
 
@@ -140,7 +163,7 @@ class Vid2playerDataset(BaseDataset):
             A_img = Image.fromarray(A_img_np[:, :, ::-1])
         elif input_type == 'mask':
             A_img = Image.open(A_path).convert('L')
-            A_img = np.array(A_img) > 127 # store mask where bg in 1 and fg in 0
+            A_img = np.array(A_img) > 127 # store mask where fg in 1 and bg in 0
             if 'crop' in self.opt.resize_or_crop:
                 A_img = A_img[params['crop_pos'][0] : params['crop_pos'][0] + params['crop_size'][0],
                               params['crop_pos'][1] : params['crop_pos'][1] + params['crop_size'][1]]
