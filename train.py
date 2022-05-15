@@ -22,13 +22,17 @@ def train():
         opt.display_freq = 1
         opt.print_freq = 1    
         opt.nThreads = 1
+    if opt.test_only:
+        opt.isTrain = False
+        opt.which_epoch = 'best'
 
-    ### initialize dataset train and val
-    data_loader_train = CreateDataLoader(opt)
-    dataset_train = data_loader_train.load_data()
-    print('#training video frames = %d' % len(data_loader_train))
+    ### initialize datasets
+    if not opt.test_only:
+        data_loader_train = CreateDataLoader(opt)
+        dataset_train = data_loader_train.load_data()
+        print('Collected training video frames = %d' % len(data_loader_train))
 
-    if opt.eval_freq != 0:
+    if opt.eval_freq != 0 or opt.test_only:
         opt_val = copy.deepcopy(opt)
         opt_val.isTrain = False
         opt_val.phase = 'val'
@@ -37,18 +41,32 @@ def train():
         opt_val.batchSize = 1  # test code only supports batchSize = 1
         opt_val.serial_batches = True  # no shuffle
         opt_val.no_flip = True  # no flip
+
         data_loader_val = CreateDataLoader(opt_val)
         dataset_val = data_loader_val.load_data()
         dataset_val.loss_best = 1e9
-        print('#val video frames = %d' % len(data_loader_val))
+        print('Collected val video frames = %d' % len(data_loader_val))
+
+        opt_test = copy.deepcopy(opt_val)
+        opt_test.phase = 'test'
+        opt_test.use_relight = False
+        data_loader_test = CreateDataLoader(opt_test)
+        dataset_test = data_loader_test.load_data()
+        print('Collected test video frames = %d' % len(data_loader_test))
 
     ### initialize models
-    models = create_model(opt)
-    modelG, modelD, flowNet, optimizer_G, optimizer_D, optimizer_D_T = create_optimizer(opt, models)
-    if opt.use_amp:
-        scaler = torch.cuda.amp.GradScaler()
+    if not opt.test_only:
+        models = create_model(opt)
+        modelG, modelD, flowNet, optimizer_G, optimizer_D, optimizer_D_T = create_optimizer(opt, models)
+
+        if opt.use_amp:
+            scaler = torch.cuda.amp.GradScaler()
+        else:
+            scaler = None
     else:
-        scaler = None
+        modelG = create_model(opt)
+        eval(modelG, dataset_val, dataset_test, test_only=True)
+        return
 
     ### set parameters    
     n_gpus, tG, tD, tDB, s_scales, t_scales, input_nc, output_nc, \
@@ -162,7 +180,7 @@ def train():
             update_best = False
             loss_best = None
             if opt.eval_freq != 0 and total_steps % opt.eval_freq == 0:
-                update_best = eval(modelG.module, dataset_val, visualizer, total_steps)
+                update_best = eval(modelG.module, dataset_val, dataset_test, visualizer, total_steps)
                 loss_best = dataset_val.loss_best 
 
             ### save latest model
@@ -179,91 +197,104 @@ def train():
         ### save model for this epoch and update model params
         save_models(opt, epoch, epoch_iter, total_steps, visualizer, iter_path, modelG, modelD, scaler, end_of_epoch=True)
         update_models(opt, epoch, modelG, modelD, data_loader_train)
-        eval(modelG.module, dataset_val, visualizer, total_steps, end_of_epoch=epoch)
+        eval(modelG.module, dataset_val, dataset_test, visualizer, total_steps, end_of_epoch=epoch)
 
 
-def eval(model, dataset, visualizer, total_steps, end_of_epoch=None):
+def eval(model, dataset_val, dataset_test, visualizer=None, total_steps=None, end_of_epoch=None, test_only=False):
+    def run_eval_on_one_dataset(dataset, collect_loss=True):
+        start_of_seq = 3
+        loss_sum = 0
+        frame_cnt = 0
+        frames = []
+        for i, data in tqdm(enumerate(dataset)):
+            if data['change_seq']:
+                model.fake_B_prev = None
+                start_of_seq = 3
+
+            _, _, height, width = data['A'].size()
+            As = data['A'].view(1, -1, opt.input_nc, height, width)
+            Bs = data['B'].view(1, -1, 3, height, width) if len(data['B'].size()) > 2 else None
+            inst = data['inst'].view(1, -1, 1, height, width) if len(data['inst'].size()) > 2 else None
+            fake_B, _ = model.inference(As, Bs, inst)
+            device = fake_B.get_device()
+
+            real_A = As[0][-1].detach().to(device) # 3 x h x w
+            real_B = Bs[0][-1].detach().to(device) # 3 x h x w
+            if opt.generate_mask:
+                fake_B_raw, fake_mask = fake_B[0][:3].detach(), fake_B[0][3:].detach() # 3 x h x w, 1 x h x w
+                fake_B = fake_B_raw * fake_mask + real_A[:3] * (1 - fake_mask)
+            else:
+                fake_B = fake_B[0].detach() # 3 x h x w   
+
+            ### add color shift
+            if not opt.generate_mask:
+                sample_width = 50 if opt.is_fg else 20
+                diff = real_B - fake_B
+                diff_crop = torch.cat((diff[:, :sample_width], diff[:, -sample_width:]), dim=1)
+                diff_avg = torch.mean(diff_crop.view(-1, 3), dim=0).unsqueeze(1).unsqueeze(1)
+                fake_B = fake_B + diff_avg
+
+            if collect_loss:
+                if start_of_seq == 0:
+                    recon_loss = L2Loss(real_B, fake_B)
+                    loss_sum += recon_loss.item()
+                    frame_cnt += 1
+                else:
+                    start_of_seq -= 1
+
+            if opt.pose_input_format == 'stick_on_bg':
+                real_A = cv2.cvtColor(util.tensor2im(As[0][-1]), cv2.COLOR_RGB2BGR)
+            elif opt.pose_input_format == 'stick_with_bg':
+                real_A = cv2.cvtColor(util.tensor2im(As[0][-1][3:]), cv2.COLOR_RGB2BGR)
+            real_B = cv2.cvtColor(util.tensor2im(real_B), cv2.COLOR_RGB2BGR)
+            fake_B = cv2.cvtColor(util.tensor2im(fake_B), cv2.COLOR_RGB2BGR)
+            if opt.generate_mask:
+                fake_B_raw = cv2.cvtColor(util.tensor2im(fake_B_raw), cv2.COLOR_RGB2BGR)
+                fake_mask = util.tensor2im(fake_mask, normalize=False)
+                fake_mask = np.concatenate((fake_mask, fake_mask, fake_mask), axis=2)
+                frames.append(util.plot_image_grid([real_A, real_B, fake_B_raw, fake_B, fake_mask], nrow=5))
+            else:
+                frames.append(util.plot_image_grid([real_A, real_B, fake_B], nrow=3))
+        
+        if collect_loss:
+            loss = loss_sum / frame_cnt
+        else:
+            loss = None
+        return frames, loss
+
     opt = model.opt
     model.fake_B_prev = None
     model.opt.isTrain = False
-    ReconLoss = torch.nn.L1Loss()
+    L2Loss = torch.nn.L1Loss()
 
-    start_of_seq = 3
-    loss_sum = 0
-    frame_cnt = 0
-    frames = []
-    visualizer.vis_print("Running evaluation ...")
-    for i, data in tqdm(enumerate(dataset)):
-        if data['change_seq']:
-            model.fake_B_prev = None
-            start_of_seq = 3
-
-        _, _, height, width = data['A'].size()
-        As = data['A'].view(1, -1, opt.input_nc, height, width)
-        Bs = data['B'].view(1, -1, 3, height, width) if len(data['B'].size()) > 2 else None
-        inst = data['inst'].view(1, -1, 1, height, width) if len(data['inst'].size()) > 2 else None
-        fake_B, _ = model.inference(As, Bs, inst)
-        device = fake_B.get_device()
-
-        real_A = As[0][-1].detach().to(device) # 3 x h x w
-        real_B = Bs[0][-1].detach().to(device) # 3 x h x w
-        if opt.generate_mask:
-            fake_B_raw, fake_mask = fake_B[0][:3].detach(), fake_B[0][3:].detach() # 3 x h x w, 1 x h x w
-            fake_B = fake_B_raw * fake_mask + real_A[:3] * (1 - fake_mask)
-        else:
-            fake_B = fake_B[0].detach() # 3 x h x w   
-
-        ### add color shift
-        if not opt.generate_mask:
-            sample_width = 50 if opt.is_fg else 20
-            diff = real_B - fake_B
-            diff_crop = torch.cat((diff[:, :sample_width], diff[:, -sample_width:]), dim=1)
-            diff_avg = torch.mean(diff_crop.view(-1, 3), dim=0).unsqueeze(1).unsqueeze(1)
-            fake_B = fake_B + diff_avg
-
-        if start_of_seq == 0:
-            recon_loss = ReconLoss(real_B, fake_B)
-            loss_sum += recon_loss.item()
-            frame_cnt += 1
-        else:
-            start_of_seq -= 1
-
-        if opt.pose_input_format == 'stick_on_bg':
-            real_A = cv2.cvtColor(util.tensor2im(As[0][-1]), cv2.COLOR_RGB2BGR)
-        elif opt.pose_input_format == 'stick_with_bg':
-            real_A = cv2.cvtColor(util.tensor2im(As[0][-1][3:]), cv2.COLOR_RGB2BGR)
-        real_B = cv2.cvtColor(util.tensor2im(real_B), cv2.COLOR_RGB2BGR)
-        fake_B = cv2.cvtColor(util.tensor2im(fake_B), cv2.COLOR_RGB2BGR)
-        if opt.generate_mask:
-            fake_B_raw = cv2.cvtColor(util.tensor2im(fake_B_raw), cv2.COLOR_RGB2BGR)
-            fake_mask = util.tensor2im(fake_mask, normalize=False)
-            fake_mask = np.concatenate((fake_mask, fake_mask, fake_mask), axis=2)
-            frames.append(util.plot_image_grid([real_A, real_B, fake_B_raw, fake_B, fake_mask], nrow=5))
-        else:
-            frames.append(util.plot_image_grid([real_A, real_B, fake_B], nrow=3))
+    print("Running evaluation ...")
+    frames_val, loss = run_eval_on_one_dataset(dataset_val)
+    frames_test, _ = run_eval_on_one_dataset(dataset_test, collect_loss=False)
+    frames = frames_val + frames_test
+    model.fake_B_prev = None
+    model.opt.isTrain = True
     
     if end_of_epoch is not None:
         util.sequence_to_video(frames, os.path.join(opt.checkpoints_dir, opt.name, 'val_{}.mp4'.format(end_of_epoch)), fps=25)
-        model.fake_B_prev = None
-        model.opt.isTrain = True
         return 
-
-    loss = loss_sum / frame_cnt
+    if test_only:
+        util.sequence_to_video(frames, os.path.join(opt.checkpoints_dir, opt.name, 'val_best.mp4'.format(end_of_epoch)), fps=25)
+        print("Average val loss {:.6f}".format(loss))
+        return 
+   
     update_best = False
     eps = 0.0005
-    if loss < dataset.loss_best + eps:
+    if loss < dataset_val.loss_best + eps:
         util.sequence_to_video(frames, os.path.join(opt.checkpoints_dir, opt.name, 'val_best.mp4'), fps=25)
-        visualizer.vis_print("Average val loss {:.6f} < current best loss {:.6f}, updating best model ...".format(loss, dataset.loss_best))
-        dataset.loss_best = loss
+        visualizer.vis_print("Average val loss {:.6f} < current best loss {:.6f}, updating best model ...".format(loss, dataset_val.loss_best))
+        dataset_val.loss_best = loss
         update_best = True
     else:
-        visualizer.vis_print("Average val loss {:.6f} > current best loss {:.6f}, not update best model ...".format(loss, dataset.loss_best))
+        visualizer.vis_print("Average val loss {:.6f} > current best loss {:.6f}, not update best model ...".format(loss, dataset_val.loss_best))
 
     errors = {'val': loss}
     visualizer.plot_current_errors(errors, total_steps)
 
-    model.fake_B_prev = None
-    model.opt.isTrain = True
     return update_best
 
 

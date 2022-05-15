@@ -92,6 +92,7 @@ class BaseOptions():
         self.parser.add_argument('--augment_background', action='store_true', help='Augment background by stitching fg to new bg')
         self.parser.add_argument('--augment_ratio', type=float, default=1.0, help='ratio for augmentation')  
         self.parser.add_argument('--background_path', type=str, default='wimbledon_background_extend.png', help='path of background image')
+        self.parser.add_argument('--test_only', action='store_true', help='only run test')
 
         # miscellaneous                
         self.parser.add_argument('--load_pretrain', type=str, default='', help='if specified, load the pretrained model')                
