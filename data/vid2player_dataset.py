@@ -62,14 +62,18 @@ class Vid2playerDataset(BaseDataset):
         img_paths = self.img_paths[seq_idx]        
         n_frames_total, start_idx, t_step = get_video_params(self.opt, self.n_frames_total, len(img_paths), self.frame_idx)
         augment_background = False
+        dx, dy, dl = 0, 0, None
         if opt.augment_background and opt.phase == 'train' and np.random.rand() < opt.augment_ratio:
             dx, dy = np.random.randint(-100, 100, 2)
             augment_background = True
+            if opt.augment_lighting:
+                dl = np.random.randint(-30, 30, 1)[0]
         
         img = Image.open(img_paths[start_idx]).convert('RGB')     
         size = img.size
         params = get_img_params(self.opt, size)
         params['thick'] = self.opt.is_fg == True
+        params['dl'] = dl
 
         frame_range = list(range(n_frames_total)) if (self.opt.isTrain or self.A is None) else [self.opt.n_frames_G-1]
         for i in frame_range:
@@ -114,6 +118,8 @@ class Vid2playerDataset(BaseDataset):
                 if opt.background_path.startswith('wimbledon'): y -= 100
                 crop_box = [x + dx, y + dy, x + dx + size[0], y + dy + size[1]]
                 bg_crop = crop_image(self.background, crop_box) # in RGB 
+                if opt.augment_lighting:
+                    bg_crop = self.adjust_brightness(bg_crop, dl)
                 transform = get_transform(opt, params)
                 Gi = transform(Image.fromarray(bg_crop))
                 Ai = torch.cat([Gi, Si])
@@ -170,6 +176,9 @@ class Vid2playerDataset(BaseDataset):
             return torch.from_numpy(A_img).unsqueeze(0).float()
         else:
             A_img = Image.open(A_path).convert('RGB')
+            if self.opt.augment_lighting and params.get('dl', None) is not None:
+                A_img_np = self.adjust_brightness(np.array(A_img), params['dl'])
+                A_img = Image.fromarray(A_img_np)
 
         is_img = input_type == 'img'
         method = Image.BICUBIC if is_img else Image.NEAREST
@@ -217,6 +226,12 @@ class Vid2playerDataset(BaseDataset):
         A_img = Image.fromarray(A_np)
         A_img = A_img.resize((w, h))
         return A_img
+    
+    def adjust_brightness(self, img, value):
+        hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
+        hsv[:,:,2] = np.clip((hsv[:,:,2].astype(int) + value), 0, 255)
+        img = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
+        return img
 
     def __len__(self):        
         return sum(self.frames_count)

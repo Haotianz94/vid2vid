@@ -49,7 +49,6 @@ def train():
 
         opt_test = copy.deepcopy(opt_val)
         opt_test.phase = 'test'
-        opt_test.use_relight = False
         data_loader_test = CreateDataLoader(opt_test)
         dataset_test = data_loader_test.load_data()
         print('Collected test video frames = %d' % len(data_loader_test))
@@ -218,7 +217,7 @@ def eval(model, dataset_val, dataset_test, visualizer=None, total_steps=None, en
             fake_B, _ = model.inference(As, Bs, inst)
             device = fake_B.get_device()
 
-            real_A = As[0][-1].detach().to(device) # 3 x h x w
+            real_A = As[0][-1].detach().to(device) # input_nc x h x w
             real_B = Bs[0][-1].detach().to(device) # 3 x h x w
             if opt.generate_mask:
                 fake_B_raw, fake_mask = fake_B[0][:3].detach(), fake_B[0][3:].detach() # 3 x h x w, 1 x h x w
@@ -229,7 +228,8 @@ def eval(model, dataset_val, dataset_test, visualizer=None, total_steps=None, en
             ### add color shift
             if not opt.generate_mask:
                 sample_width = 50 if opt.is_fg else 20
-                diff = real_B - fake_B
+                diff = real_A[:3] - fake_B # Use input background to correct color difference
+                # diff = real_B - fake_B
                 diff_crop = torch.cat((diff[:, :sample_width], diff[:, -sample_width:]), dim=1)
                 diff_avg = torch.mean(diff_crop.view(-1, 3), dim=0).unsqueeze(1).unsqueeze(1)
                 fake_B = fake_B + diff_avg
@@ -246,6 +246,7 @@ def eval(model, dataset_val, dataset_test, visualizer=None, total_steps=None, en
                 real_A = cv2.cvtColor(util.tensor2im(As[0][-1]), cv2.COLOR_RGB2BGR)
             elif opt.pose_input_format == 'stick_with_bg':
                 real_A = cv2.cvtColor(util.tensor2im(As[0][-1][3:]), cv2.COLOR_RGB2BGR)
+                bg = cv2.cvtColor(util.tensor2im(As[0][-1][:3]), cv2.COLOR_RGB2BGR)
             real_B = cv2.cvtColor(util.tensor2im(real_B), cv2.COLOR_RGB2BGR)
             fake_B = cv2.cvtColor(util.tensor2im(fake_B), cv2.COLOR_RGB2BGR)
             if opt.generate_mask:
@@ -254,7 +255,10 @@ def eval(model, dataset_val, dataset_test, visualizer=None, total_steps=None, en
                 fake_mask = np.concatenate((fake_mask, fake_mask, fake_mask), axis=2)
                 frames.append(util.plot_image_grid([real_A, real_B, fake_B_raw, fake_B, fake_mask], nrow=5))
             else:
-                frames.append(util.plot_image_grid([real_A, real_B, fake_B], nrow=3))
+                if opt.pose_input_format == 'stick_on_bg':
+                    frames.append(util.plot_image_grid([real_A, real_B, fake_B], nrow=3))
+                elif opt.pose_input_format == 'stick_with_bg':
+                    frames.append(util.plot_image_grid([real_A, bg, real_B, fake_B], nrow=4))
         
         if collect_loss:
             loss = loss_sum / frame_cnt

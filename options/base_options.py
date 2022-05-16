@@ -90,6 +90,7 @@ class BaseOptions():
         self.parser.add_argument('--lambda_recon_bg', type=float, default=10.0, help='weight for background reconstruction loss')        
         self.parser.add_argument('--lambda_recon', type=float, default=10.0, help='weight for reconstruction loss')  
         self.parser.add_argument('--augment_background', action='store_true', help='Augment background by stitching fg to new bg')
+        self.parser.add_argument('--augment_lighting', action='store_true', help='Augment brightness')
         self.parser.add_argument('--augment_ratio', type=float, default=1.0, help='ratio for augmentation')  
         self.parser.add_argument('--background_path', type=str, default='wimbledon_background_extend.png', help='path of background image')
         self.parser.add_argument('--test_only', action='store_true', help='only run test')
