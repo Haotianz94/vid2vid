@@ -37,6 +37,7 @@ def train():
         opt_val.isTrain = False
         opt_val.phase = 'val'
         opt_val.start_frame = 0
+        opt_val.resize_or_crop = 'none'
         opt_val.nThreads = 1   # test code only supports nThreads = 1
         opt_val.batchSize = 1  # test code only supports batchSize = 1
         opt_val.serial_batches = True  # no shuffle
