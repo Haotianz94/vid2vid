@@ -113,7 +113,7 @@ class BaseOptions():
                 ids_list.append(id)
         return ids_list
 
-    def parse(self, save=True, print=True):
+    def parse(self, save=True, print_opt=True):
         if not self.initialized:
             self.initialize()
         self.opt, self.unknown = self.parser.parse_known_args()
@@ -129,7 +129,7 @@ class BaseOptions():
             torch.cuda.set_device(self.opt.gpu_ids[0])
 
         args = vars(self.opt)
-        if print:
+        if print_opt:
             print('------------ Options -------------')
             for k, v in sorted(args.items()):
                 print('%s: %s' % (str(k), str(v)))
