@@ -7,7 +7,7 @@ python train.py --name federer_fg_usopen_weak \
 --is_fg \
 --add_recon_loss --lambda_recon 1000 \
 --gpu_ids 0,1,2,3 --batchSize 15 --max_frames_per_gpu 3 \
---niter 3 --niter_decay 2 \
+--niter 5 --niter_decay 5 \
 --no_first_img --n_frames_total 12 --max_t_step 4 \
 --print_freq 105 --display_freq 105 --save_latest_freq 1050 --eval_freq 3000 \
 --use_log --no_html \
