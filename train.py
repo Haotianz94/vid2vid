@@ -48,11 +48,14 @@ def train():
         dataset_val.loss_best = 1e9
         print('Collected val video frames = %d' % len(data_loader_val))
 
-        opt_test = copy.deepcopy(opt_val)
-        opt_test.phase = 'test'
-        data_loader_test = CreateDataLoader(opt_test)
-        dataset_test = data_loader_test.load_data()
-        print('Collected test video frames = %d' % len(data_loader_test))
+        if os.path.exists(os.path.join(opt.dataroot, 'test_bg')):
+            opt_test = copy.deepcopy(opt_val)
+            opt_test.phase = 'test'
+            data_loader_test = CreateDataLoader(opt_test)
+            dataset_test = data_loader_test.load_data()
+            print('Collected test video frames = %d' % len(data_loader_test))
+        else:
+            dataset_test = None
 
     ### initialize models
     if not opt.test_only:
@@ -274,7 +277,10 @@ def eval(model, dataset_val, dataset_test, visualizer=None, total_steps=None, en
 
     print("Running evaluation ...")
     frames_val, loss = run_eval_on_one_dataset(dataset_val)
-    frames_test, _ = run_eval_on_one_dataset(dataset_test, collect_loss=False)
+    if dataset_test is not None:
+        frames_test, _ = run_eval_on_one_dataset(dataset_test, collect_loss=False)
+    else:
+        frames_test = []
     frames = frames_val + frames_test
     model.fake_B_prev = None
     model.opt.isTrain = True

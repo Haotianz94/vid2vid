@@ -1,10 +1,10 @@
-python train.py --name federer_fg_wimbledon_weak \
---dataroot datasets/vid2player/federer_fg_wimbledon_weak \
+python train.py --name djokovic_fg_ausopen_weak \
+--dataroot datasets/vid2player/djokovic_fg_ausopen_weak \
 --dataset_mode vid2player \
 --pose_input_format stick_with_bg --pose_input body,feet,racket \
 --input_nc 6 --num_D 2 \
---resize_or_crop randomScaleHeight_and_scaledCrop --loadSize 320 --fineSize 256 \
---is_fg --use_relight \
+--resize_or_crop randomScaleHeight_and_scaledCrop --loadSize 288 --fineSize 256 \
+--is_fg \
 --add_recon_loss --lambda_recon 1000 \
 --gpu_ids 0,1,2,3 --batchSize 15 --max_frames_per_gpu 3 \
 --niter 5 --niter_decay 5 \

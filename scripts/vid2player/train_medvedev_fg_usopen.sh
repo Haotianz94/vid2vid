@@ -1,7 +1,7 @@
 python train.py --name medvedev_fg_usopen_recon \
---dataroot 'datasets/vid2player/medvedev_fg_usopen' \
+--dataroot datasets/vid2player/medvedev_fg_usopen \
 --dataset_mode vid2player \
---pose_input_format 'stick_with_bg' --pose_input 'body,feet,racket' \
+--pose_input_format stick_with_bg --pose_input body,feet,racket \
 --input_nc 6 --num_D 2 --resize_or_crop none \
 --is_fg \
 --add_recon_loss --lambda_recon 1000 \

@@ -1,0 +1,12 @@
+CUDA_VISIBLE_DEVICES=2,3 python train.py --name thiem_bg_ausopen_weak \
+--dataroot datasets/vid2player/thiem_bg_ausopen_weak \
+--dataset_mode vid2player \
+--pose_input_format stick_with_bg --pose_input body,feet,racket \
+--input_nc 6 --num_D 2 \
+--resize_or_crop randomScaleHeight_and_scaledCrop --loadSize 160 --fineSize 128 \
+--add_recon_loss --lambda_recon 1000 \
+--gpu_ids 0,1 --batchSize 8 --max_frames_per_gpu 4 \
+--niter 5 --niter_decay 5 \
+--no_first_img --n_frames_total 12 --max_t_step 4 \
+--print_freq 96 --display_freq 1600 --save_latest_freq 1600 --eval_freq 1600 \
+--use_log --no_html \

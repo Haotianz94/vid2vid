@@ -1,9 +1,9 @@
-CUDA_VISIBLE_DEVICES=0,1 python train.py --name djokovic_bg_wimbledon_recon \
---dataroot 'datasets/vid2player/djokovic_bg_wimbledon' \
+CUDA_VISIBLE_DEVICES=0,1 python train.py --name djokovic_bg_wimbledon_weak \
+--dataroot datasets/vid2player/djokovic_bg_wimbledon_weak \
 --dataset_mode vid2player \
---pose_input_format 'stick_with_bg' --pose_input 'body,feet,racket' \
---input_nc 6 --num_D 2 --resize_or_crop none \
---use_relight \
+--pose_input_format stick_with_bg --pose_input body,feet,racket \
+--input_nc 6 --num_D 2 \
+--resize_or_crop randomScaleHeight_and_scaledCrop --loadSize 192 --fineSize 160 \
 --add_recon_loss --lambda_recon 1000 \
 --gpu_ids 0,1 --batchSize 8 --max_frames_per_gpu 4 \
 --niter 5 --niter_decay 5 \
