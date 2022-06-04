@@ -118,7 +118,7 @@ class Vid2playerDataset(BaseDataset):
                 if opt.background_path.startswith('wimbledon'): y -= 100
                 crop_box = [x + dx, y + dy, x + dx + size[0], y + dy + size[1]]
                 bg_crop = crop_image(self.background, crop_box) # in RGB 
-                if 'crop' in self.opt.resize_or_crop:
+                if 'crop' in opt.resize_or_crop or 'scaledCrop' in opt.resize_or_crop:
                     bg_crop = bg_crop[params['crop_pos'][0] : params['crop_pos'][0] + params['crop_size'][0],
                                 params['crop_pos'][1] : params['crop_pos'][1] + params['crop_size'][1]]
                 if opt.augment_lighting:
@@ -173,7 +173,7 @@ class Vid2playerDataset(BaseDataset):
         elif input_type == 'mask':
             A_img = Image.open(A_path).convert('L')
             A_img = np.array(A_img) > 127 # store mask where fg in 1 and bg in 0
-            if 'crop' in self.opt.resize_or_crop:
+            if 'crop' in self.opt.resize_or_crop or 'scaledCrop' in self.opt.resize_or_crop:
                 A_img = A_img[params['crop_pos'][0] : params['crop_pos'][0] + params['crop_size'][0],
                               params['crop_pos'][1] : params['crop_pos'][1] + params['crop_size'][1]]
             return torch.from_numpy(A_img).unsqueeze(0).float()
