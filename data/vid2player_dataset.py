@@ -118,6 +118,9 @@ class Vid2playerDataset(BaseDataset):
                 if opt.background_path.startswith('wimbledon'): y -= 100
                 crop_box = [x + dx, y + dy, x + dx + size[0], y + dy + size[1]]
                 bg_crop = crop_image(self.background, crop_box) # in RGB 
+                if 'crop' in self.opt.resize_or_crop:
+                    bg_crop = bg_crop[params['crop_pos'][0] : params['crop_pos'][0] + params['crop_size'][0],
+                                params['crop_pos'][1] : params['crop_pos'][1] + params['crop_size'][1]]
                 if opt.augment_lighting:
                     bg_crop = self.adjust_brightness(bg_crop, dl)
                 transform = get_transform(opt, params)
